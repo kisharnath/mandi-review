@@ -6,6 +6,7 @@ import { Flash, PageHeader, SectionTitle } from "@/components/ui";
 import { canEdit, requireUser } from "@/lib/auth";
 import { COLL, getDb, MAX_TIME_MS } from "@/lib/db";
 import { first, fmtNumber, titleCase, toObjectId } from "@/lib/format";
+import { MANDI_EDITS_ENABLED } from "@/lib/mandis";
 
 export default async function MandiPage({ params, searchParams }: {
   params: Promise<{ id: string }>;
@@ -51,7 +52,7 @@ export default async function MandiPage({ params, searchParams }: {
             <p className="mt-4 text-xs text-zinc-500">Other names: {(mandi.aliases as string[]).join(", ")}</p>
           ) : null}
         </div>
-        {canEdit(user) ? (
+        {canEdit(user) && MANDI_EDITS_ENABLED ? (
           <form action={updateMandiAction} className="card space-y-3 p-5">
             <SectionTitle>Edit</SectionTitle>
             <input type="hidden" name="back" value={`/mandis/${id}`} />

@@ -8,6 +8,7 @@ import { canEdit, requireUser } from "@/lib/auth";
 import type { MandiNameDoc } from "@/lib/catalog";
 import { COLL, getDb, MAX_TIME_MS } from "@/lib/db";
 import { escapeRegex, first, fmtDate, fmtDateTime, fmtNumber, titleCase, toObjectId } from "@/lib/format";
+import { MANDI_EDITS_ENABLED } from "@/lib/mandis";
 import { stateNames } from "@/lib/stats";
 
 export const maxDuration = 60;
@@ -177,9 +178,13 @@ async function Detail({ row, back, editor, stateLabel }: { row: MandiNameDoc; ba
               {row.status !== "pending" && <SubmitButton className="btn-secondary" name="status" value="pending">Back to pending</SubmitButton>}
             </div>
           </form>
-          <Link className="mt-4 inline-block text-xs font-medium text-emerald-700 hover:underline" href={`/mandis/new?${newMandi}`}>
-            It is a new mandi: add it →
-          </Link>
+          {MANDI_EDITS_ENABLED ? (
+            <Link className="mt-4 inline-block text-xs font-medium text-emerald-700 hover:underline" href={`/mandis/new?${newMandi}`}>
+              It is a new mandi: add it →
+            </Link>
+          ) : (
+            <p className="mt-4 text-xs text-zinc-500">The mandi list is shared with the v1 system, so new mandis are added there, not here.</p>
+          )}
         </div>
       )}
     </div>

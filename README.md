@@ -2,7 +2,7 @@
 
 A website for checking the mandi price data that the [Mandi scraper](https://github.com/vicharanashala/Mandi) collects, and for deciding what each crop and mandi name means.
 
-This branch (`v2`) works on the **v2 database** (`PriceV2`), built by the scraper's `maintenance/migrate_v2.py`. The `main` branch is the v1 site for the old `Price` database.
+This branch (`v2`) works on the **v2 collections**, built by the scraper's `maintenance/migrate_v2.py`: either `v2_`-prefixed collections next to v1 in `Price` (`MONGODB_DB=Price`, `V2_COLLECTION_PREFIX=v2_`) or a separate database (`MONGODB_DB=PriceV2`, no prefix). v1 collections are only read, and `available_mandi` is shared. The `main` branch is the v1 site.
 
 | Page | What it is for |
 | --- | --- |
@@ -30,7 +30,7 @@ Every change is written to `audit_log`.
 ## Run locally
 
 ```bash
-cp .env.example .env.local   # MONGODB_URI, MONGODB_DB=PriceV2, APP_USERS, AUTH_SECRET
+cp .env.example .env.local   # MONGODB_URI, MONGODB_DB, V2_COLLECTION_PREFIX, APP_USERS, AUTH_SECRET
 npm install
 npm run dev                  # http://localhost:3000
 ```
@@ -38,8 +38,8 @@ npm run dev                  # http://localhost:3000
 ## Deploy on Vercel
 
 1. Push this repo to GitHub and import it in Vercel (framework: Next.js). Deploy the `v2` branch, or merge it to `main`.
-2. In **Settings → Environment Variables** set `MONGODB_URI`, `MONGODB_DB` (`PriceV2`), `APP_USERS`, `AUTH_SECRET`.
-3. In MongoDB Atlas **Network Access**, allow Vercel to connect (usually `0.0.0.0/0`), and give the database user `readWrite` on the v2 database only.
+2. In **Settings → Environment Variables** set `MONGODB_URI`, `MONGODB_DB` (`Price`), `V2_COLLECTION_PREFIX` (`v2_`), `APP_USERS`, `AUTH_SECRET`.
+3. In MongoDB Atlas **Network Access**, allow Vercel to connect (usually `0.0.0.0/0`), and use a database user with `readWrite` on `Price`.
 4. Heavy pages declare `maxDuration = 60`, which Vercel allows on all plans.
 
 ## Users

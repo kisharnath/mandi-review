@@ -17,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Nav user={user} openCount={openCount} logout={logout} />
+      <Nav user={user} openCount={openCount} logout={logout} mandisCollection={COLL.mandis} auditCollection={COLL.audit} />
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-7xl px-6 py-8">{children}</div>
       </main>

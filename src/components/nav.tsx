@@ -5,21 +5,28 @@ import { Activity, Database, Flag, History, LayoutDashboard, ListChecks, LogOut,
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const LINKS = [
+const linksFor = (mandis: string, audit: string) => [
   { href: "/", label: "Today", icon: LayoutDashboard },
   { href: "/runs", label: "Scrape runs", icon: Activity },
   { href: "/review", label: "Review list", icon: ListChecks },
   { href: "/mapping", label: "Crop names", icon: Shuffle },
   { href: "/mandi-links", label: "Mandi names", icon: Signpost },
   { href: "/crops", label: "Crops & products", icon: Sprout },
-  { href: "/data/available_mandi", label: "Mandis", icon: MapPin },
+  { href: `/data/${mandis}`, label: "Mandis", icon: MapPin },
   { href: "/state-names", label: "States", icon: Flag },
   { href: "/data", label: "All data", icon: Database },
-  { href: "/data/audit_log", label: "Change history", icon: History },
+  { href: `/data/${audit}`, label: "Change history", icon: History },
 ];
 
-export function Nav({ user, openCount, logout }: { user: { name: string; role: string }; openCount: number; logout: () => Promise<void> }) {
+export function Nav({ user, openCount, logout, mandisCollection, auditCollection }: {
+  user: { name: string; role: string };
+  openCount: number;
+  logout: () => Promise<void>;
+  mandisCollection: string;
+  auditCollection: string;
+}) {
   const pathname = usePathname();
+  const LINKS = linksFor(mandisCollection, auditCollection);
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : href === "/data" ? pathname === "/data" || (pathname.startsWith("/data/") && !LINKS.some((l) => l.href !== "/data" && l.href.startsWith("/data/") && pathname.startsWith(l.href))) : pathname.startsWith(href);
 
