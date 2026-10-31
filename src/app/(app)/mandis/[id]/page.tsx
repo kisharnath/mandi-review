@@ -20,8 +20,8 @@ export default async function MandiPage({ params, searchParams }: {
   const mandi = await db.collection(COLL.mandis).findOne({ _id: oid });
   if (!mandi) notFound();
   const crops = await db
-    .collection(COLL.markets)
-    .aggregate<{ _id: string; n: number }>([{ $match: { market_id: oid } }, { $group: { _id: "$commodity_name", n: { $sum: 1 } } }, { $sort: { _id: 1 } }], { maxTimeMS: MAX_TIME_MS })
+    .collection(COLL.listings)
+    .aggregate<{ _id: string; n: number }>([{ $match: { mandi_id: oid } }, { $group: { _id: "$commodity_name", n: { $sum: 1 } } }, { $sort: { _id: 1 } }], { maxTimeMS: MAX_TIME_MS })
     .toArray();
   const [lon, lat] = (mandi.location?.coordinates as number[] | undefined) ?? [];
 
@@ -41,7 +41,7 @@ export default async function MandiPage({ params, searchParams }: {
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {crops.map((c) => (
-                <Link key={c._id} href={`/mapping?name=${encodeURIComponent(c._id)}`} className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700 hover:bg-emerald-50 hover:text-emerald-800">
+                <Link key={c._id} href={`/mapping?status=all&q=${encodeURIComponent(c._id)}`} className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700 hover:bg-emerald-50 hover:text-emerald-800">
                   {c._id}
                 </Link>
               ))}

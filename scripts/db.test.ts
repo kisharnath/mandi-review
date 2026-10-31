@@ -3,15 +3,16 @@
  *
  *   TEST_MONGODB_URI=mongodb://127.0.0.1:27017 npm run test:db
  *
- * It creates and drops its own database; never point it at production.
+ * It creates and drops its own database; never point it at a real one.
  */
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { MongoClient, ObjectId, type Db } from "mongodb";
+import {
+  addStateSpelling, addVarietyLink, createCrop, createProduct, decideCropName, decideMandiName, linkCounts, updateCrop,
+} from "../src/lib/catalog";
 import { COLL } from "../src/lib/db";
-import { assignName, createGroup, listCropNames, unassignName } from "../src/lib/mapping";
-import { linkMandiName } from "../src/lib/mandis";
-import { scanMapping } from "../src/lib/scan";
+import { createMandi } from "../src/lib/mandis";
 
 const uri = process.env.TEST_MONGODB_URI;
 if (!uri) throw new Error("Set TEST_MONGODB_URI to a throwaway MongoDB");
@@ -20,32 +21,39 @@ let client: MongoClient;
 let db: Db;
 
 const ids = {
-  groundnut: new ObjectId(), paddy: new ObjectId(), cattle: new ObjectId(),
-  mcHen: new ObjectId(), mcPaddyA: new ObjectId(), mcPaddyB: new ObjectId(), mcRice: new ObjectId(), mcSona: new ObjectId(),
-  pendurthi: new ObjectId(),
+  paddyCrop: new ObjectId(), paddy: new ObjectId(), groundnutCrop: new ObjectId(), groundnut: new ObjectId(),
+  cnPaddy: new ObjectId(), cnHen: new ObjectId(), cnSona: new ObjectId(),
+  mnPendurti: new ObjectId(), pendurthi: new ObjectId(),
+  l1: new ObjectId(), l2: new ObjectId(), l3: new ObjectId(), l4: new ObjectId(), l5: new ObjectId(),
 };
 
 before(async () => {
   client = await new MongoClient(uri).connect();
   db = client.db(`mandi_review_test_${Date.now()}`);
-  await db.collection(COLL.groups).insertMany([
-    { _id: ids.groundnut, canonical_name: "groundnut", aliases: ["groundnut", "hen"], active: true },
-    { _id: ids.paddy, canonical_name: "paddy", aliases: ["paddy", "paddy(common)", "rice"], active: true },
-    { _id: ids.cattle, canonical_name: "cattle", aliases: ["cattle", "rice"], active: true },
+  await db.collection(COLL.states).insertOne({ _id: "andhra-pradesh" as unknown as ObjectId, name: "andhra pradesh", spellings: ["andhra pradesh"] });
+  await db.collection(COLL.crops).insertMany([
+    { _id: ids.paddyCrop, name: "paddy", default_product_id: ids.paddy, active: true },
+    { _id: ids.groundnutCrop, name: "groundnut", default_product_id: ids.groundnut, active: true },
   ]);
-  await db.collection(COLL.markets).insertMany([
-    { _id: ids.mcHen, commodity_name: "hen", state: "maharashtra", market_name: "pune", source_system: "agmarknet", commodity_alias_lookup_id: ids.groundnut },
-    { _id: ids.mcPaddyA, commodity_name: "paddy(common)", state: "andhra pradesh", market_name: "pendurthi apmc", source_system: "agmarknet", commodity_alias_lookup_id: ids.paddy },
-    { _id: ids.mcPaddyB, commodity_name: "paddy(common)", state: "andhra pradesh", market_name: "pendurti", source_system: "agmarknet", commodity_alias_lookup_id: ids.paddy, market_id: null },
-    { _id: ids.mcRice, commodity_name: "rice", state: "andhra pradesh", market_name: "kurnool", source_system: "agmarknet", commodity_alias_lookup_id: ids.paddy },
-    { _id: ids.mcSona, commodity_name: "paddy-sona", state: "andhra pradesh", market_name: "kurnool", source_system: "ap", commodity_alias_lookup_id: null },
+  await db.collection(COLL.products).insertMany([
+    { _id: ids.paddy, crop_id: ids.paddyCrop, name: "paddy", form: "raw", active: true },
+    { _id: ids.groundnut, crop_id: ids.groundnutCrop, name: "groundnut", form: "raw", active: true },
   ]);
-  await db.collection(COLL.prices).insertMany([
-    { market_commodity_id: ids.mcHen, commodity_alias_lookup_id: ids.groundnut, date: new Date("2026-10-28"), modal_price: 400 },
-    { market_commodity_id: ids.mcSona, commodity_alias_lookup_id: null, date: new Date("2026-10-28"), modal_price: 2600 },
-    { market_commodity_id: ids.mcSona, commodity_alias_lookup_id: null, date: new Date("2026-10-29"), modal_price: 2610 },
+  await db.collection(COLL.cropNames).insertMany([
+    { _id: ids.cnPaddy, source: "agmarknet", raw_name: "paddy(common)", raw_variety: "*", product_id: ids.paddy, status: "approved", needs_check: true, decided_by: "migration" },
+    { _id: ids.cnHen, source: "agmarknet", raw_name: "hen", raw_variety: "*", product_id: null, status: "pending", suggestion: { product_id: ids.groundnut, reason: "looks wrong" } },
+    { _id: ids.cnSona, source: "ap", raw_name: "paddy-sona", raw_variety: "*", product_id: null, status: "pending" },
   ]);
   await db.collection(COLL.mandis).insertOne({ _id: ids.pendurthi, name: "pendurthi apmc", state: "andhra pradesh", aliases: [] });
+  await db.collection(COLL.mandiNames).insertOne({ _id: ids.mnPendurti, source: "agmarknet", state_code: "andhra-pradesh", raw_name: "pendurti", mandi_id: null, status: "pending" });
+  await db.collection(COLL.listings).insertMany([
+    { _id: ids.l1, source_system: "agmarknet", state: "andhra pradesh", state_code: "andhra-pradesh", market_name: "pendurti", commodity_name: "paddy(common)", variety: "paddy", product_id: ids.paddy, mandi_id: null },
+    { _id: ids.l2, source_system: "agmarknet", state: "andhra pradesh", state_code: "andhra-pradesh", market_name: "pune", commodity_name: "hen", variety: null, product_id: null, mandi_id: null },
+    { _id: ids.l3, source_system: "ap", state: "andhra pradesh", state_code: "andhra-pradesh", market_name: "kurnool", commodity_name: "paddy-sona", variety: "sona", product_id: null, mandi_id: null },
+    { _id: ids.l4, source_system: "ap", state: "andhra pradesh", state_code: "andhra-pradesh", market_name: "kurnool", commodity_name: "paddy-sona", variety: "basmati", product_id: null, mandi_id: null },
+    { _id: ids.l5, source_system: "agmarknet", state: "a.p.", state_code: null, market_name: "x", commodity_name: "paddy(common)", variety: "paddy", product_id: null, mandi_id: null },
+  ]);
+  await db.collection(COLL.prices).insertOne({ market_commodity_id: ids.l3, date: new Date("2026-10-28"), modal_price: 2600 });
 });
 
 after(async () => {
@@ -53,71 +61,73 @@ after(async () => {
   await client?.close();
 });
 
-test("lists names with the right flags", async () => {
-  const rows = await listCropNames(db);
-  const by = Object.fromEntries(rows.map((r) => [r.name, r]));
-  assert.deepEqual(by["hen"].flags, ["looks_wrong"]);
-  assert.deepEqual(by["paddy-sona"].flags, ["unmatched"]);
-  assert.ok(by["rice"].flags.includes("in_many_groups"));
-  assert.deepEqual(by["paddy(common)"].flags, []);
+const listing = (id: ObjectId) => db.collection(COLL.listings).findOne({ _id: id });
+
+test("counts pending and migration-approved links", async () => {
+  assert.deepEqual(await linkCounts(db), { cropPending: 2, cropCheck: 1, mandiPending: 1, mandiCheck: 0 });
 });
 
-test("scan adds review items and changes nothing else", async () => {
-  const before = await db.collection(COLL.groups).find().sort({ _id: 1 }).toArray();
-  const res = await scanMapping(db, "test");
-  assert.equal(res.unmapped, 1);
-  assert.equal(res.duplicates, 1);
-  const keys = (await db.collection(COLL.review).find().toArray()).map((d) => d.key).sort();
-  assert.ok(keys.includes("unmapped_commodity|paddy-sona"));
-  assert.ok(keys.includes("suspicious_mapping|hen"));
-  assert.ok(keys.includes("duplicate_alias|rice"));
-  assert.deepEqual(await db.collection(COLL.groups).find().sort({ _id: 1 }).toArray(), before);
-  // Running it again does not duplicate items.
-  const count = await db.collection(COLL.review).countDocuments();
-  await scanMapping(db, "test");
-  assert.equal(await db.collection(COLL.review).countDocuments(), count);
+test("approving a crop name sets the product on its listings, records who decided, and leaves prices alone", async () => {
+  const pricesBefore = await db.collection(COLL.prices).find().toArray();
+  const res = await decideCropName(db, user, ids.cnSona, { status: "approved", productId: ids.paddy });
+  assert.equal(res.listings, 2);
+  assert.equal(String((await listing(ids.l3))!.product_id), String(ids.paddy));
+  const row = await db.collection(COLL.cropNames).findOne({ _id: ids.cnSona });
+  assert.equal(row!.status, "approved");
+  assert.equal(row!.decided_by, "tester");
+  assert.deepEqual(await db.collection(COLL.prices).find().toArray(), pricesBefore);
+  assert.equal(await db.collection(COLL.audit).countDocuments({ action: "crop_name.approved" }), 1);
 });
 
-test("assigning a name updates the group, listings and prices, and closes its review item", async () => {
-  const res = await assignName(db, user, "Paddy-Sona ", ids.paddy);
-  assert.deepEqual(res, { listings: 1, prices: 2 });
-  const paddy = await db.collection(COLL.groups).findOne({ _id: ids.paddy });
-  assert.ok(paddy!.aliases.includes("paddy-sona"));
-  assert.equal(await db.collection(COLL.prices).countDocuments({ commodity_alias_lookup_id: ids.paddy }), 2);
-  const item = await db.collection(COLL.review).findOne({ key: "unmapped_commodity|paddy-sona" });
-  assert.equal(item!.status, "resolved");
-  assert.equal(item!.resolved_by, "tester");
-  assert.equal(await db.collection(COLL.audit).countDocuments({ action: "crop_name.assign" }), 1);
+test("a variety-specific link overrides the any-variety link for that variety only", async () => {
+  const { productId: basmati } = await createCrop(db, user, "basmati paddy");
+  const vid = await addVarietyLink(db, user, ids.cnSona, "basmati");
+  await decideCropName(db, user, vid as ObjectId, { status: "approved", productId: basmati });
+  assert.equal(String((await listing(ids.l4))!.product_id), String(basmati));
+  assert.equal(String((await listing(ids.l3))!.product_id), String(ids.paddy));
+  // Re-deciding the "*" row must not overwrite the basmati listing.
+  await decideCropName(db, user, ids.cnSona, { status: "approved", productId: ids.paddy });
+  assert.equal(String((await listing(ids.l4))!.product_id), String(basmati));
 });
 
-test("assigning a name in several groups leaves it in exactly one", async () => {
-  await assignName(db, user, "rice", ids.paddy);
-  const holders = await db.collection(COLL.groups).find({ aliases: "rice" }).toArray();
-  assert.deepEqual(holders.map((h) => String(h._id)), [String(ids.paddy)]);
+test("rejecting a crop name clears the product from its listings", async () => {
+  await decideCropName(db, user, ids.cnPaddy, { status: "rejected" });
+  assert.equal((await listing(ids.l1))!.product_id, null);
+  assert.equal((await db.collection(COLL.cropNames).findOne({ _id: ids.cnPaddy }))!.needs_check, false);
+  await decideCropName(db, user, ids.cnPaddy, { status: "approved", productId: ids.paddy });
+  assert.equal(String((await listing(ids.l1))!.product_id), String(ids.paddy));
 });
 
-test("moving a wrongly matched name to a new group", async () => {
-  const cattle = await createGroup(db, user, "Poultry");
-  await assignName(db, user, "hen", cattle);
-  const groundnut = await db.collection(COLL.groups).findOne({ _id: ids.groundnut });
-  assert.ok(!groundnut!.aliases.includes("hen"));
-  assert.equal((await db.collection(COLL.markets).findOne({ _id: ids.mcHen }))!.commodity_alias_lookup_id.toString(), cattle.toString());
-  assert.equal((await db.collection(COLL.prices).findOne({ market_commodity_id: ids.mcHen }))!.commodity_alias_lookup_id.toString(), cattle.toString());
-  await assert.rejects(createGroup(db, user, "poultry"), /already exists/);
+test("approving needs a product, and a new product can be added to a crop", async () => {
+  await assert.rejects(decideCropName(db, user, ids.cnHen, { status: "approved" }), /Choose a product/);
+  const poultry = await createCrop(db, user, "poultry");
+  const hen = await createProduct(db, user, poultry.cropId, "hen");
+  await decideCropName(db, user, ids.cnHen, { status: "approved", productId: hen });
+  assert.equal(String((await listing(ids.l2))!.product_id), String(hen));
+  await assert.rejects(createCrop(db, user, "Poultry"), /already exists/);
+  await updateCrop(db, user, poultry.cropId, { defaultProductId: hen });
+  assert.equal(String((await db.collection(COLL.crops).findOne({ _id: poultry.cropId }))!.default_product_id), String(hen));
+  await assert.rejects(updateCrop(db, user, poultry.cropId, { defaultProductId: ids.paddy }), /belong to this crop/);
 });
 
-test("removing a match hides the name everywhere", async () => {
-  await unassignName(db, user, "hen");
-  assert.equal(await db.collection(COLL.groups).countDocuments({ aliases: "hen" }), 0);
-  assert.equal((await db.collection(COLL.markets).findOne({ _id: ids.mcHen }))!.commodity_alias_lookup_id, null);
-});
-
-test("linking an unknown mandi name adds an alias and points listings at it", async () => {
-  await db.collection(COLL.review).insertOne({ key: "unknown_market|andhra pradesh|pendurti", type: "unknown_market", status: "open" });
-  const res = await linkMandiName(db, user, "Pendurti", "andhra pradesh", ids.pendurthi);
+test("approving a mandi name sets mandi_id on its listings; available_mandi is not changed", async () => {
+  const before = await db.collection(COLL.mandis).findOne({ _id: ids.pendurthi });
+  const res = await decideMandiName(db, user, ids.mnPendurti, { status: "approved", mandiId: ids.pendurthi });
   assert.equal(res.listings, 1);
-  const mandi = await db.collection(COLL.mandis).findOne({ _id: ids.pendurthi });
-  assert.deepEqual(mandi!.aliases, ["pendurti"]);
-  assert.equal(String((await db.collection(COLL.markets).findOne({ _id: ids.mcPaddyB }))!.market_id), String(ids.pendurthi));
-  assert.equal((await db.collection(COLL.review).findOne({ key: "unknown_market|andhra pradesh|pendurti" }))!.status, "resolved");
+  assert.equal(String((await listing(ids.l1))!.mandi_id), String(ids.pendurthi));
+  assert.deepEqual(await db.collection(COLL.mandis).findOne({ _id: ids.pendurthi }), before);
+});
+
+test("a new mandi uses only the existing available_mandi fields", async () => {
+  const id = await createMandi(db, user, { name: "New Mandi", state: "Andhra Pradesh", district: "Kurnool", lat: 15.8, lon: 78.0 });
+  const doc = await db.collection(COLL.mandis).findOne({ _id: id });
+  assert.deepEqual(Object.keys(doc!).sort(), ["_id", "aliases", "createdAt", "district", "location", "name", "postcode", "source", "state", "updatedAt"]);
+});
+
+test("adding a state spelling fills state_code on listings and refuses spellings owned by another state", async () => {
+  await db.collection(COLL.states).insertOne({ _id: "telangana" as unknown as ObjectId, name: "telangana", spellings: ["telangana"] });
+  const res = await addStateSpelling(db, user, "andhra-pradesh", "A.P.");
+  assert.equal(res.listings, 1);
+  assert.equal((await listing(ids.l5))!.state_code, "andhra-pradesh");
+  await assert.rejects(addStateSpelling(db, user, "telangana", "a.p."), /already belongs/);
 });

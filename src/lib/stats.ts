@@ -9,6 +9,7 @@ export type StateCoverage = {
   mandis: number;
   usualMandis: number; // mandis that reported at least once in the 7 days before
   silent: number; // of those, how many did not report on this day
+  withProduct: number; // prices whose listing has an approved product (what farmers can see)
 };
 
 /** Latest price date that is not in the future. */
@@ -32,17 +33,18 @@ async function mandisByState(from: Date, to: Date) {
   const db = await getDb();
   return db
     .collection(COLL.prices)
-    .aggregate<{ _id: string | null; records: number; mandis: string[] }>(
+    .aggregate<{ _id: string | null; records: number; withProduct: number; mandis: string[] }>(
       [
         { $match: { date: { $gte: from, $lt: to } } },
         { $group: { _id: "$market_commodity_id", n: { $sum: 1 } } },
-        { $lookup: { from: COLL.markets, localField: "_id", foreignField: "_id", as: "mc", pipeline: [{ $project: { state: 1, market_name: 1, market_id: 1 } }] } },
+        { $lookup: { from: COLL.listings, localField: "_id", foreignField: "_id", as: "mc", pipeline: [{ $project: { state_code: 1, state: 1, market_name: 1, mandi_id: 1, product_id: 1 } }] } },
         { $unwind: "$mc" },
         {
           $group: {
-            _id: "$mc.state",
+            _id: { $ifNull: ["$mc.state_code", "$mc.state"] },
             records: { $sum: "$n" },
-            mandis: { $addToSet: { $ifNull: [{ $toString: "$mc.market_id" }, "$mc.market_name"] } },
+            withProduct: { $sum: { $cond: [{ $ne: [{ $ifNull: ["$mc.product_id", null] }, null] }, "$n", 0] } },
+            mandis: { $addToSet: { $ifNull: [{ $toString: "$mc.mandi_id" }, "$mc.market_name"] } },
           },
         },
       ],
@@ -67,6 +69,7 @@ export const stateCoverage = unstable_cache(
         return {
           state,
           records: t?.records ?? 0,
+          withProduct: t?.withProduct ?? 0,
           mandis: todaySet.size,
           usualMandis: usual.size,
           silent: [...usual].filter((m) => !todaySet.has(m)).length,
@@ -89,12 +92,12 @@ export async function silentMandis(state: string, day: string) {
       [
         { $match: { date: { $gte: weekStart, $lt } } },
         { $group: { _id: "$market_commodity_id", last: { $max: "$date" } } },
-        { $lookup: { from: COLL.markets, localField: "_id", foreignField: "_id", as: "mc", pipeline: [{ $project: { state: 1, market_name: 1, market_id: 1 } }] } },
+        { $lookup: { from: COLL.listings, localField: "_id", foreignField: "_id", as: "mc", pipeline: [{ $project: { state_code: 1, state: 1, market_name: 1, mandi_id: 1, product_id: 1 } }] } },
         { $unwind: "$mc" },
-        { $match: { "mc.state": state } },
+        { $match: { $or: [{ "mc.state_code": state }, { "mc.state_code": null, "mc.state": state }] } },
         {
           $group: {
-            _id: { $ifNull: [{ $toString: "$mc.market_id" }, "$mc.market_name"] },
+            _id: { $ifNull: [{ $toString: "$mc.mandi_id" }, "$mc.market_name"] },
             name: { $first: "$mc.market_name" },
             lastDate: { $max: "$last" },
           },
@@ -121,3 +124,14 @@ export async function openReviewCounts() {
     .toArray();
   return Object.fromEntries(rows.map((r) => [r._id, r.n])) as Record<string, number>;
 }
+
+/** state code → display name, for pages that show codes. */
+export const stateNames = unstable_cache(
+  async (): Promise<Record<string, string>> => {
+    const db = await getDb();
+    const rows = await db.collection<{ _id: string; name: string }>(COLL.states).find({}, { projection: { name: 1 } }).toArray();
+    return Object.fromEntries(rows.map((r) => [r._id, r.name]));
+  },
+  ["state-names"],
+  { revalidate: 300 },
+);

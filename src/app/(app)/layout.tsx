@@ -6,7 +6,14 @@ import { COLL, getDb } from "@/lib/db";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const db = await getDb();
-  const openCount = await db.collection(COLL.review).countDocuments({ status: "open" }, { maxTimeMS: 5000 }).catch(() => 0);
+  const [problems, pendingCrops, pendingMandis] = await Promise.all(
+    [
+      db.collection(COLL.review).countDocuments({ status: "open" }, { maxTimeMS: 5000 }),
+      db.collection(COLL.cropNames).countDocuments({ status: "pending" }, { maxTimeMS: 5000 }),
+      db.collection(COLL.mandiNames).countDocuments({ status: "pending" }, { maxTimeMS: 5000 }),
+    ].map((p) => p.catch(() => 0)),
+  );
+  const openCount = problems + pendingCrops + pendingMandis;
 
   return (
     <div className="flex h-screen overflow-hidden">

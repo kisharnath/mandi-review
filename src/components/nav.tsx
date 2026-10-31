@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Activity, Database, History, LayoutDashboard, ListChecks, LogOut, MapPin, Shuffle, Sprout } from "lucide-react";
+import { Activity, Database, Flag, History, LayoutDashboard, ListChecks, LogOut, MapPin, Shuffle, Signpost, Sprout } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -9,9 +9,11 @@ const LINKS = [
   { href: "/", label: "Today", icon: LayoutDashboard },
   { href: "/runs", label: "Scrape runs", icon: Activity },
   { href: "/review", label: "Review list", icon: ListChecks },
-  { href: "/mapping", label: "Crop matching", icon: Shuffle },
-  { href: "/groups", label: "Crop groups", icon: Sprout },
+  { href: "/mapping", label: "Crop names", icon: Shuffle },
+  { href: "/mandi-links", label: "Mandi names", icon: Signpost },
+  { href: "/crops", label: "Crops & products", icon: Sprout },
   { href: "/data/available_mandi", label: "Mandis", icon: MapPin },
+  { href: "/state-names", label: "States", icon: Flag },
   { href: "/data", label: "All data", icon: Database },
   { href: "/data/audit_log", label: "Change history", icon: History },
 ];
@@ -29,7 +31,7 @@ export function Nav({ user, openCount, logout }: { user: { name: string; role: s
         </div>
         <div>
           <div className="text-sm font-semibold text-zinc-900">Mandi Data Review</div>
-          <div className="text-xs text-zinc-500">Prices · crops · mandis</div>
+          <div className="text-xs text-zinc-500">v2 · approved name links</div>
         </div>
       </div>
       <nav className="flex-1 space-y-0.5 px-3">

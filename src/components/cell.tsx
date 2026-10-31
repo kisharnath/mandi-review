@@ -9,34 +9,41 @@ export function getPath(row: Record<string, unknown>, path: string): unknown {
 }
 
 /** Render one table cell, with links into the matching/mandi/group pages where useful. */
-export function Cell({ row, col, collection, groupNames, mandiNames }: {
+export function Cell({ row, col, collection, productNames, mandiNames }: {
   row: Record<string, unknown>;
   col: Column;
   collection: string;
-  groupNames: Record<string, string>;
+  productNames: Record<string, string>;
   mandiNames: Record<string, string>;
 }) {
   const v = getPath(row, col.key);
   if (v === null || v === undefined || v === "") {
-    if (col.kind === "group") return <Badge tone="amber">No group</Badge>;
+    if (col.kind === "product") return <Badge tone="amber">No product</Badge>;
     if (col.kind === "mandi") return <Badge tone="blue">Not linked</Badge>;
     return <span className="text-zinc-300">—</span>;
   }
 
-  if (col.kind === "group") {
-    return <Link className="text-emerald-800 hover:underline" href={`/groups/${String(v)}`}>{titleCase(groupNames[String(v)] ?? "(missing group)")}</Link>;
+  if (col.kind === "product") {
+    return <Link className="text-emerald-800 hover:underline" href={`/data/${COLL.products}/${String(v)}`}>{titleCase(productNames[String(v)] ?? "(missing product)")}</Link>;
+  }
+  if (col.kind === "status") {
+    const tone = v === "approved" ? "green" : v === "rejected" ? "red" : "amber";
+    return <Badge tone={tone}>{String(v)}</Badge>;
   }
   if (col.kind === "mandi") {
     return <Link className="text-emerald-800 hover:underline" href={`/mandis/${String(v)}`}>{titleCase(mandiNames[String(v)] ?? "(missing mandi)")}</Link>;
   }
-  if (col.key.endsWith("commodity_name")) {
-    return <Link className="font-medium text-zinc-900 hover:text-emerald-700 hover:underline" href={`/mapping?name=${encodeURIComponent(String(v))}`}>{String(v)}</Link>;
+  if (col.key.endsWith("commodity_name") || (collection === COLL.cropNames && col.key === "raw_name")) {
+    return <Link className="font-medium text-zinc-900 hover:text-emerald-700 hover:underline" href={`/mapping?q=${encodeURIComponent(String(v))}&status=all`}>{String(v)}</Link>;
+  }
+  if (collection === COLL.mandiNames && col.key === "raw_name") {
+    return <Link className="font-medium text-zinc-900 hover:text-emerald-700 hover:underline" href={`/mandi-links?q=${encodeURIComponent(String(v))}&status=all`}>{String(v)}</Link>;
   }
   if (collection === COLL.mandis && col.key === "name") {
     return <Link className="font-medium text-zinc-900 hover:text-emerald-700 hover:underline" href={`/mandis/${String(row._id)}`}>{titleCase(String(v))}</Link>;
   }
-  if (collection === COLL.groups && col.key === "canonical_name") {
-    return <Link className="font-medium text-zinc-900 hover:text-emerald-700 hover:underline" href={`/groups/${String(row._id)}`}>{titleCase(String(v))}</Link>;
+  if (collection === COLL.crops && col.key === "name") {
+    return <Link className="font-medium text-zinc-900 hover:text-emerald-700 hover:underline" href={`/crops/${String(row._id)}`}>{titleCase(String(v))}</Link>;
   }
 
   switch (col.kind) {

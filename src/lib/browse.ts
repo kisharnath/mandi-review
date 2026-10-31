@@ -14,7 +14,7 @@ export type BrowseResult = {
   total: number;
   totalIsEstimate: boolean;
   filterOptions: Record<string, string[]>;
-  groupNames: Record<string, string>;
+  productNames: Record<string, string>;
   mandiNames: Record<string, string>;
 };
 
@@ -39,11 +39,11 @@ async function buildQuery(db: Db, def: CollectionDef, p: BrowseParams): Promise<
   if (q) {
     if (ObjectId.isValid(q) && q.length === 24) {
       const id = new ObjectId(q);
-      and.push({ $or: [{ _id: id }, { market_commodity_id: id }, { commodity_alias_lookup_id: id }, { market_id: id }] });
-    } else if (def.searchVia === "markets") {
+      and.push({ $or: [{ _id: id }, { market_commodity_id: id }, { product_id: id }, { mandi_id: id }, { crop_id: id }] });
+    } else if (def.searchVia === "listings") {
       const rx = { $regex: escapeRegex(q), $options: "i" };
       const ids = await db
-        .collection(COLL.markets)
+        .collection(COLL.listings)
         .find({ $or: [{ commodity_name: rx }, { market_name: rx }] }, { projection: { _id: 1 } })
         .limit(5000)
         .maxTimeMS(MAX_TIME_MS)
@@ -83,23 +83,27 @@ export async function browse(db: Db, name: string, p: BrowseParams): Promise<Bro
   // Daily prices: attach the listing (crop name, mandi, state) to each row.
   if (name === COLL.prices && rows.length) {
     const mcIds = [...new Set(rows.map((r) => String(r.market_commodity_id)))].filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
-    const mcs = await db.collection(COLL.markets).find({ _id: { $in: mcIds } }).toArray();
+    const mcs = await db.collection(COLL.listings).find({ _id: { $in: mcIds } }).toArray();
     const byId = new Map(mcs.map((m) => [String(m._id), m]));
     rows = rows.map((r) => ({ ...r, _mc: byId.get(String(r.market_commodity_id)) ?? null }));
   }
 
-  // Show names instead of bare ids for crop groups and mandis.
-  const groupIds = new Set<string>();
+  // Show names instead of bare ids for products and mandis.
+  const productIds = new Set<string>();
   const mandiIds = new Set<string>();
   for (const r of rows) {
-    for (const g of [r.commodity_alias_lookup_id, r._mc?.commodity_alias_lookup_id]) if (g) groupIds.add(String(g));
-    for (const m of [r.market_id, r._mc?.market_id]) if (m) mandiIds.add(String(m));
+    for (const g of [r.product_id, r._mc?.product_id, r.default_product_id]) if (g) productIds.add(String(g));
+    for (const m of [r.mandi_id, r._mc?.mandi_id]) if (m) mandiIds.add(String(m));
   }
   const toIds = (s: Set<string>) => [...s].filter((x) => ObjectId.isValid(x)).map((x) => new ObjectId(x));
-  const [groups, mandis] = await Promise.all([
-    groupIds.size ? db.collection(COLL.groups).find({ _id: { $in: toIds(groupIds) } }, { projection: { canonical_name: 1 } }).toArray() : [],
+  const [products, mandis] = await Promise.all([
+    productIds.size ? db.collection(COLL.products).find({ _id: { $in: toIds(productIds) } }, { projection: { name: 1, crop_id: 1 } }).toArray() : [],
     mandiIds.size ? db.collection(COLL.mandis).find({ _id: { $in: toIds(mandiIds) } }, { projection: { name: 1 } }).toArray() : [],
   ]);
+  const crops = products.length
+    ? await db.collection(COLL.crops).find({ _id: { $in: products.map((p) => p.crop_id) } }, { projection: { name: 1 } }).toArray()
+    : [];
+  const cropName = new Map(crops.map((c) => [String(c._id), String(c.name ?? "")]));
 
   return {
     def,
@@ -107,7 +111,12 @@ export async function browse(db: Db, name: string, p: BrowseParams): Promise<Bro
     total: typeof total === "number" ? total : -1,
     totalIsEstimate: empty,
     filterOptions,
-    groupNames: Object.fromEntries(groups.map((g) => [String(g._id), String(g.canonical_name ?? "")])),
+    productNames: Object.fromEntries(
+      products.map((p) => {
+        const crop = cropName.get(String(p.crop_id));
+        return [String(p._id), crop && crop !== p.name ? `${crop} / ${p.name}` : String(p.name ?? "")];
+      }),
+    ),
     mandiNames: Object.fromEntries(mandis.map((m) => [String(m._id), String(m.name ?? "")])),
   };
 }

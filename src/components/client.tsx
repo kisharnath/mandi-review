@@ -147,7 +147,7 @@ type PickItem = { id: string; label: string; sub?: string };
 
 /** Searchable dropdown backed by /api/search. Puts the chosen id in a hidden input. */
 export function Picker({ kind, name, state, placeholder, initial }: {
-  kind: "groups" | "mandis";
+  kind: "products" | "crops" | "mandis";
   name: string;
   state?: string;
   placeholder: string;

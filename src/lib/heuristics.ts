@@ -50,7 +50,11 @@ export type NameFlag = "unmatched" | "looks_wrong" | "other_script" | "in_many_g
  */
 export function looksWrong(name: string, canonical: string | null | undefined, groupAliases: string[] = []): boolean {
   const nameWords = wordsOf(name).filter((w) => LATIN.test(w));
-  if (nameWords.length === 0) return false; // non-Latin script: can't judge by spelling
+  if (nameWords.length === 0) {
+    // Only generic words ("other green and fresh vegetables") says nothing about the crop: flag it.
+    // A name in another script cannot be judged by spelling: leave it.
+    return /[a-z]{3,}/i.test(name) && !isOtherScript(name);
+  }
   const reference = [canonical ?? "", ...groupAliases.slice(0, 50)].flatMap(wordsOf).filter((w) => LATIN.test(w));
   if (reference.length === 0) return false;
   const canonWords = wordsOf(canonical).filter((w) => LATIN.test(w));

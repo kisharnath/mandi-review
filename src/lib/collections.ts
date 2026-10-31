@@ -3,7 +3,7 @@ import { COLL } from "./db";
 export type Column = {
   key: string; // dotted path into the document
   label: string;
-  kind?: "text" | "number" | "date" | "datetime" | "id" | "bool" | "list" | "json" | "group" | "mandi";
+  kind?: "text" | "number" | "date" | "datetime" | "id" | "bool" | "list" | "json" | "product" | "mandi" | "status";
 };
 
 export type FilterDef = { key: string; label: string; type: "select" | "date" | "nullable" };
@@ -16,50 +16,48 @@ export type CollectionDef = {
   filters: FilterDef[];
   columns: Column[];
   sort: Record<string, 1 | -1>;
-  /** price_records has no names of its own: search goes through markets_commodities. */
-  searchVia?: "markets";
+  /** price_records has no names of its own: search goes through listings. */
+  searchVia?: "listings";
 };
 
 export const COLLECTIONS: CollectionDef[] = [
   {
-    name: COLL.markets,
-    label: "Mandi crop listings",
-    description: "One row for each crop name at each mandi and source. Links a crop name to its crop group and mandi.",
+    name: COLL.listings,
+    label: "Listings",
+    description: "One row per crop name at one mandi from one source. Product and mandi come only from approved name links.",
     searchFields: ["commodity_name", "market_name", "variety"],
     filters: [
-      { key: "state", label: "State", type: "select" },
+      { key: "state_code", label: "State", type: "select" },
       { key: "source_system", label: "Source", type: "select" },
-      { key: "commodity_alias_lookup_id", label: "Crop group", type: "nullable" },
-      { key: "market_id", label: "Mandi", type: "nullable" },
+      { key: "product_id", label: "Product", type: "nullable" },
+      { key: "mandi_id", label: "Mandi", type: "nullable" },
     ],
     columns: [
       { key: "commodity_name", label: "Crop name" },
       { key: "variety", label: "Variety" },
-      { key: "grade", label: "Grade" },
-      { key: "market_name", label: "Mandi" },
+      { key: "market_name", label: "Mandi name" },
       { key: "state", label: "State" },
       { key: "source_system", label: "Source" },
-      { key: "commodity_alias_lookup_id", label: "Crop group", kind: "group" },
-      { key: "market_id", label: "Mandi record", kind: "mandi" },
+      { key: "product_id", label: "Product", kind: "product" },
+      { key: "mandi_id", label: "Mandi", kind: "mandi" },
+      { key: "last_seen", label: "Last seen", kind: "datetime" },
     ],
     sort: { state: 1, market_name: 1, commodity_name: 1 },
   },
   {
     name: COLL.prices,
     label: "Daily prices",
-    description: "Every price the scraper saved. Search finds prices by crop or mandi name.",
+    description: "Every price saved. A price points only at its listing. Search by crop or mandi name.",
     searchFields: [],
-    searchVia: "markets",
-    filters: [
-      { key: "date", label: "Date", type: "date" },
-      { key: "commodity_alias_lookup_id", label: "Crop group", type: "nullable" },
-    ],
+    searchVia: "listings",
+    filters: [{ key: "date", label: "Date", type: "date" }],
     columns: [
       { key: "date", label: "Date", kind: "date" },
       { key: "_mc.commodity_name", label: "Crop name" },
       { key: "_mc.variety", label: "Variety" },
       { key: "_mc.market_name", label: "Mandi" },
       { key: "_mc.state", label: "State" },
+      { key: "_mc.product_id", label: "Product", kind: "product" },
       { key: "modal_price", label: "Modal ₹", kind: "number" },
       { key: "min_price", label: "Min ₹", kind: "number" },
       { key: "max_price", label: "Max ₹", kind: "number" },
@@ -69,9 +67,84 @@ export const COLLECTIONS: CollectionDef[] = [
     sort: { date: -1 },
   },
   {
+    name: COLL.cropNames,
+    label: "Crop name links",
+    description: "Each crop name a source uses, and the product a person approved for it.",
+    searchFields: ["raw_name", "raw_variety", "notes"],
+    filters: [
+      { key: "status", label: "Status", type: "select" },
+      { key: "source", label: "Source", type: "select" },
+      { key: "decided_by", label: "Decided by", type: "select" },
+    ],
+    columns: [
+      { key: "raw_name", label: "Crop name" },
+      { key: "raw_variety", label: "Variety" },
+      { key: "source", label: "Source" },
+      { key: "status", label: "Status", kind: "status" },
+      { key: "product_id", label: "Product", kind: "product" },
+      { key: "listings", label: "Listings", kind: "number" },
+      { key: "decided_by", label: "Decided by" },
+      { key: "decided_at", label: "Decided", kind: "datetime" },
+    ],
+    sort: { listings: -1 },
+  },
+  {
+    name: COLL.mandiNames,
+    label: "Mandi name links",
+    description: "Each mandi name a source uses in a state, and the mandi a person approved for it.",
+    searchFields: ["raw_name", "notes"],
+    filters: [
+      { key: "status", label: "Status", type: "select" },
+      { key: "state_code", label: "State", type: "select" },
+      { key: "source", label: "Source", type: "select" },
+    ],
+    columns: [
+      { key: "raw_name", label: "Mandi name" },
+      { key: "state_code", label: "State" },
+      { key: "source", label: "Source" },
+      { key: "status", label: "Status", kind: "status" },
+      { key: "mandi_id", label: "Mandi", kind: "mandi" },
+      { key: "listings", label: "Listings", kind: "number" },
+      { key: "decided_by", label: "Decided by" },
+    ],
+    sort: { listings: -1 },
+  },
+  {
+    name: COLL.crops,
+    label: "Crops",
+    description: "Crops, each with a default product used when a farmer names only the crop.",
+    searchFields: ["name", "notes"],
+    filters: [{ key: "active", label: "Active", type: "select" }],
+    columns: [
+      { key: "name", label: "Crop" },
+      { key: "default_product_id", label: "Default product", kind: "product" },
+      { key: "active", label: "Active", kind: "bool" },
+      { key: "crop_master_id", label: "Crop master id", kind: "id" },
+    ],
+    sort: { name: 1 },
+  },
+  {
+    name: COLL.products,
+    label: "Products",
+    description: "Products of each crop (for example ordinary paddy, basmati paddy, rice).",
+    searchFields: ["name"],
+    filters: [
+      { key: "form", label: "Form", type: "select" },
+      { key: "active", label: "Active", type: "select" },
+    ],
+    columns: [
+      { key: "name", label: "Product" },
+      { key: "crop_id", label: "Crop id", kind: "id" },
+      { key: "form", label: "Form" },
+      { key: "price_unit", label: "Unit" },
+      { key: "active", label: "Active", kind: "bool" },
+    ],
+    sort: { name: 1 },
+  },
+  {
     name: COLL.mandis,
     label: "Mandis",
-    description: "Every mandi with its district and location.",
+    description: "Every mandi with its district and location (schema unchanged from v1).",
     searchFields: ["name", "aliases", "district", "postcode"],
     filters: [
       { key: "state", label: "State", type: "select" },
@@ -85,25 +158,22 @@ export const COLLECTIONS: CollectionDef[] = [
       { key: "postcode", label: "Postcode" },
       { key: "aliases", label: "Other names", kind: "list" },
       { key: "location.coordinates", label: "Lon, Lat", kind: "list" },
-      { key: "source", label: "Added by" },
       { key: "updatedAt", label: "Updated", kind: "datetime" },
     ],
     sort: { state: 1, name: 1 },
   },
   {
-    name: COLL.groups,
-    label: "Crop groups",
-    description: "Each crop group and the names that belong to it. The scraper matches names to these exactly.",
-    searchFields: ["canonical_name", "aliases"],
-    filters: [{ key: "active", label: "Active", type: "select" }],
+    name: COLL.states,
+    label: "States",
+    description: "Each state with every spelling the sources use.",
+    searchFields: ["name", "spellings"],
+    filters: [],
     columns: [
-      { key: "canonical_name", label: "Crop group" },
-      { key: "aliases", label: "Names", kind: "list" },
-      { key: "active", label: "Active", kind: "bool" },
-      { key: "crop_master_id", label: "Crop master id", kind: "id" },
-      { key: "updatedAt", label: "Updated", kind: "datetime" },
+      { key: "_id", label: "Code" },
+      { key: "name", label: "State" },
+      { key: "spellings", label: "Spellings", kind: "list" },
     ],
-    sort: { canonical_name: 1 },
+    sort: { name: 1 },
   },
   {
     name: COLL.runs,
@@ -126,8 +196,8 @@ export const COLLECTIONS: CollectionDef[] = [
   },
   {
     name: COLL.review,
-    label: "Review list",
-    description: "Problems waiting for a person.",
+    label: "Problems",
+    description: "Failed scrapes, unknown state spellings and odd prices.",
     searchFields: ["title", "key"],
     filters: [
       { key: "type", label: "Type", type: "select" },
@@ -138,7 +208,6 @@ export const COLLECTIONS: CollectionDef[] = [
       { key: "title", label: "Problem" },
       { key: "type", label: "Type" },
       { key: "status", label: "Status" },
-      { key: "state", label: "State" },
       { key: "records_seen", label: "Records", kind: "number" },
       { key: "last_seen", label: "Last seen", kind: "datetime" },
       { key: "resolved_by", label: "Resolved by" },

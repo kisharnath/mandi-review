@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { DateFilter } from "@/components/client";
 import { Badge, Empty, PageHeader, SectionTitle, StatCard, TYPE_LABELS } from "@/components/ui";
+import { linkCounts } from "@/lib/catalog";
+import { getDb } from "@/lib/db";
 import { first, fmtDate, fmtDateTime, fmtNumber, titleCase } from "@/lib/format";
-import { latestPriceDay, latestRuns, openReviewCounts, stateCoverage } from "@/lib/stats";
+import { latestPriceDay, latestRuns, openReviewCounts, stateCoverage, stateNames } from "@/lib/stats";
 
 export const maxDuration = 60;
 
@@ -22,7 +24,9 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const latest = await latestPriceDay();
   const day = first(sp.day) || latest;
 
-  const [coverage, runs, open] = await Promise.all([stateCoverage(day), latestRuns(60), openReviewCounts()]);
+  const [coverage, runs, open, links, names] = await Promise.all([
+    stateCoverage(day), latestRuns(60), openReviewCounts(), linkCounts(await getDb()), stateNames(),
+  ]);
   const runDocs = runs as unknown as RunDoc[];
   const lastRunId = runDocs[0]?.run_id;
   const lastRun = runDocs.filter((r) => r.run_id === lastRunId);
@@ -30,9 +34,13 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const sources = lastRun.filter((r) => r.source !== "_pipeline");
 
   const totals = coverage.reduce(
-    (t, s) => ({ records: t.records + s.records, mandis: t.mandis + s.mandis, silent: t.silent + s.silent, states: t.states + (s.records > 0 ? 1 : 0) }),
-    { records: 0, mandis: 0, silent: 0, states: 0 },
+    (t, s) => ({
+      records: t.records + s.records, visible: t.visible + s.withProduct, mandis: t.mandis + s.mandis,
+      silent: t.silent + s.silent, states: t.states + (s.records > 0 ? 1 : 0),
+    }),
+    { records: 0, visible: 0, mandis: 0, silent: 0, states: 0 },
   );
+  const visiblePct = totals.records ? Math.round((totals.visible / totals.records) * 100) : 0;
   const openTotal = Object.values(open).reduce((a, b) => a + b, 0);
 
   return (
@@ -43,11 +51,18 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
         actions={<DateFilter param="day" label="Day" />}
       />
 
-      <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Prices saved" value={fmtNumber(totals.records)} hint="crop prices on this day" />
-        <StatCard label="States reporting" value={fmtNumber(totals.states)} hint={`of ${coverage.length} seen this week`} />
-        <StatCard label="Mandis reporting" value={fmtNumber(totals.mandis)} hint={`${fmtNumber(totals.silent)} usual mandis missing`} tone={totals.silent ? "warn" : undefined} />
-        <StatCard label="Open problems" value={fmtNumber(openTotal)} hint="waiting in the review list" href="/review" tone={openTotal ? "warn" : undefined} />
+      <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <StatCard label="Prices saved" value={fmtNumber(totals.records)} hint={`${fmtNumber(totals.states)} states, ${fmtNumber(totals.mandis)} mandis`} />
+        <StatCard
+          label="Farmers can see"
+          value={`${visiblePct}%`}
+          hint={`${fmtNumber(totals.records - totals.visible)} prices wait for an approved product`}
+          tone={visiblePct < 90 ? "warn" : undefined}
+          href="/mapping"
+        />
+        <StatCard label="Crop names to review" value={fmtNumber(links.cropPending)} hint={`${fmtNumber(links.cropCheck)} approved by migration, unchecked`} href="/mapping" tone={links.cropPending ? "warn" : undefined} />
+        <StatCard label="Mandi names to review" value={fmtNumber(links.mandiPending)} hint={`${fmtNumber(links.mandiCheck)} approved by migration, unchecked`} href="/mandi-links" tone={links.mandiPending ? "warn" : undefined} />
+        <StatCard label="Other problems" value={fmtNumber(openTotal)} hint="failed runs, odd prices, state spellings" href="/review" tone={openTotal ? "warn" : undefined} />
       </div>
 
       <div className="mb-8 grid gap-6 lg:grid-cols-3">
@@ -56,9 +71,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
             Last scrape run
           </SectionTitle>
           {!lastRunId ? (
-            <Empty title="No scrape runs recorded yet">
-              The scraper starts recording runs once the <code>fix/review-pipeline</code> branch of the Mandi repo is deployed.
-            </Empty>
+            <Empty title="No scrape runs recorded yet">Runs appear after the v2 scraper (branch feat/catalog-v2) has run once against this database.</Empty>
           ) : (
             <div className="card overflow-hidden">
               <div className="flex flex-wrap items-center gap-3 border-b border-zinc-100 px-4 py-3 text-sm">
@@ -88,7 +101,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
 
         <section>
           <SectionTitle aside={<Link href="/review" className="text-xs font-medium text-emerald-700 hover:underline">Open list →</Link>}>
-            Problems to check
+            Other problems
           </SectionTitle>
           <div className="card divide-y divide-zinc-100">
             {Object.keys(TYPE_LABELS).map((type) => (
@@ -112,19 +125,22 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
                 <tr>
                   <th>State</th>
                   <th className="text-right">Prices</th>
+                  <th className="text-right">Farmers can see</th>
                   <th className="text-right">Mandis today</th>
                   <th className="text-right">Usual mandis</th>
-                  <th className="w-1/4">Coverage</th>
+                  <th className="w-1/5">Coverage</th>
                   <th className="text-right">Missing today</th>
                 </tr>
               </thead>
               <tbody>
                 {coverage.map((s) => {
                   const pct = s.usualMandis ? Math.min(100, Math.round((s.mandis / s.usualMandis) * 100)) : s.mandis ? 100 : 0;
+                  const vis = s.records ? Math.round((s.withProduct / s.records) * 100) : 0;
                   return (
                     <tr key={s.state}>
-                      <td className="font-medium">{titleCase(s.state)}</td>
+                      <td className="font-medium">{titleCase(names[s.state] ?? s.state)}</td>
                       <td className="text-right tabular-nums">{fmtNumber(s.records)}</td>
+                      <td className={`text-right tabular-nums ${vis < 90 ? "text-amber-700" : "text-zinc-600"}`}>{s.records ? `${vis}%` : "—"}</td>
                       <td className="text-right tabular-nums">{fmtNumber(s.mandis)}</td>
                       <td className="text-right text-zinc-500 tabular-nums">{fmtNumber(s.usualMandis)}</td>
                       <td>
@@ -151,7 +167,9 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
             </table>
           </div>
         )}
-        <p className="mt-2 text-xs text-zinc-500">&quot;Usual mandis&quot; = mandis that sent at least one price in the 7 days before this day.</p>
+        <p className="mt-2 text-xs text-zinc-500">
+          &quot;Farmers can see&quot; = prices whose listing has an approved product. &quot;Usual mandis&quot; = mandis that sent at least one price in the 7 days before this day.
+        </p>
       </section>
     </>
   );

@@ -10,18 +10,20 @@ export default async function NewMandiPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const name = first(sp.name);
   const state = first(sp.state);
-  const qs = new URLSearchParams({ name, state }).toString();
+  const linkId = first(sp.linkId);
+  const qs = new URLSearchParams({ name, state, linkId }).toString();
 
   return (
     <>
       <PageHeader
         title="Add a mandi"
-        description="Use this only when the mandi is truly new. If it is an existing mandi under another spelling, link it from the review list instead."
-        actions={<Link href="/review?type=unknown_market" className="btn-secondary">← Review list</Link>}
+        description="Use this only when the mandi is truly new. If it is an existing mandi under another spelling, approve the mandi name for that mandi instead."
+        actions={<Link href="/mandi-links" className="btn-secondary">← Mandi names</Link>}
       />
       <Flash msg={first(sp.msg)} err={first(sp.err)} />
       <form action={createMandiAction} className="card grid max-w-2xl gap-4 p-6 sm:grid-cols-2">
         <input type="hidden" name="back" value={`/mandis/new?${qs}`} />
+        <input type="hidden" name="linkId" value={linkId} />
         <div className="sm:col-span-2">
           <label className="label" htmlFor="name">Mandi name (as the source writes it)</label>
           <input id="name" name="name" className="input" defaultValue={name} required />
@@ -51,7 +53,7 @@ export default async function NewMandiPage({ searchParams }: { searchParams: Pro
           Without a location, the farmer app cannot find this mandi as &quot;near me&quot;. You can add it later.
         </p>
         <div className="sm:col-span-2">
-          <SubmitButton>Add mandi and link its listings</SubmitButton>
+          <SubmitButton>{linkId ? "Add mandi and approve the name for it" : "Add mandi"}</SubmitButton>
         </div>
       </form>
     </>

@@ -7,9 +7,11 @@ import { checkLogin, requireEditor } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { COLL, getDb } from "@/lib/db";
 import { toObjectId } from "@/lib/format";
-import { assignName, createGroup, renameGroup, setGroupActive, unassignName } from "@/lib/mapping";
-import { createMandi, linkMandiName, updateMandi } from "@/lib/mandis";
-import { scanMapping } from "@/lib/scan";
+import {
+  addStateSpelling, addVarietyLink, createCrop, createProduct, decideCropName, decideMandiName, updateCrop, updateProduct,
+  type Status,
+} from "@/lib/catalog";
+import { createMandi, updateMandi } from "@/lib/mandis";
 import { SESSION_COOKIE, SESSION_MAX_AGE, signSession } from "@/lib/session";
 
 /** Only allow redirects back into this site. */
@@ -69,63 +71,102 @@ export async function logout() {
   redirect("/login");
 }
 
-// ── Crop matching ────────────────────────────────────────────────────────────
+// ── Crop name links ──────────────────────────────────────────────────────────
 
-export async function assignNameAction(form: FormData) {
+function status(form: FormData): Status {
+  const v = str(form, "status");
+  if (v !== "approved" && v !== "rejected" && v !== "pending") throw new Error("Unknown decision.");
+  return v;
+}
+
+export async function decideCropNameAction(form: FormData) {
   return act(form, async () => {
     const user = await requireEditor();
-    const groupId = needId(form, "groupId", "crop group");
-    const res = await assignName(await getDb(), user, str(form, "name"), groupId);
-    return `Matched. ${res.listings} listings and ${res.prices} prices updated.`;
+    const s = status(form);
+    const res = await decideCropName(await getDb(), user, needId(form, "id", "crop name"), {
+      status: s, productId: s === "approved" ? needId(form, "productId", "product") : null, notes: str(form, "notes"),
+    });
+    return s === "approved"
+      ? `Approved as ${res.productName}. ${res.listings} listings updated.`
+      : s === "rejected" ? `Rejected. ${res.listings} listings no longer show a price.` : "Moved back to pending.";
   });
 }
 
-export async function unassignNameAction(form: FormData) {
+export async function addVarietyAction(form: FormData) {
   return act(form, async () => {
     const user = await requireEditor();
-    await unassignName(await getDb(), user, str(form, "name"));
-    return "Match removed. Prices for this name are hidden until it is matched again.";
+    await addVarietyLink(await getDb(), user, needId(form, "id", "crop name"), str(form, "variety"));
+    return "Variety added as a pending link. Approve it to give that variety its own product.";
   });
 }
 
-export async function createGroupAction(form: FormData) {
+// ── Crops and products ───────────────────────────────────────────────────────
+
+export async function createCropAction(form: FormData) {
   return act(form, async () => {
     const user = await requireEditor();
     const db = await getDb();
-    const id = await createGroup(db, user, str(form, "canonical"), str(form, "notes"));
-    const name = str(form, "name");
-    if (name) {
-      const res = await assignName(db, user, name, id);
-      return `Crop group created and "${name}" matched to it (${res.listings} listings).`;
+    const { productId } = await createCrop(db, user, str(form, "name"), str(form, "notes"));
+    const linkId = toObjectId(str(form, "linkId"));
+    if (linkId) {
+      const res = await decideCropName(db, user, linkId, { status: "approved", productId });
+      return `Crop created and the name approved for it (${res.listings} listings).`;
     }
-    return "Crop group created.";
+    return "Crop created with a default product of the same name.";
   });
 }
 
-export async function renameGroupAction(form: FormData) {
+export async function createProductAction(form: FormData) {
   return act(form, async () => {
     const user = await requireEditor();
-    await renameGroup(await getDb(), user, needId(form, "groupId", "crop group"), str(form, "canonical"), str(form, "notes"));
-    return "Crop group saved.";
+    const db = await getDb();
+    const productId = await createProduct(db, user, needId(form, "cropId", "crop"), str(form, "name"), str(form, "form"));
+    const linkId = toObjectId(str(form, "linkId"));
+    if (linkId) {
+      const res = await decideCropName(db, user, linkId, { status: "approved", productId });
+      return `Product created and the name approved for it (${res.listings} listings).`;
+    }
+    return "Product added.";
   });
 }
 
-export async function setGroupActiveAction(form: FormData) {
+export async function updateCropAction(form: FormData) {
   return act(form, async () => {
     const user = await requireEditor();
-    const active = str(form, "active") === "true";
-    await setGroupActive(await getDb(), user, needId(form, "groupId", "crop group"), active);
-    return active ? "Crop group turned on." : "Crop group turned off.";
+    const has = (k: string) => form.has(k);
+    await updateCrop(await getDb(), user, needId(form, "cropId", "crop"), {
+      name: has("name") ? str(form, "name") : undefined,
+      notes: has("notes") ? str(form, "notes") : undefined,
+      defaultProductId: has("defaultProductId") ? toObjectId(str(form, "defaultProductId")) : undefined,
+      active: has("active") ? str(form, "active") === "true" : undefined,
+    });
+    return "Crop saved.";
   });
 }
 
-// ── Mandis ───────────────────────────────────────────────────────────────────
-
-export async function linkMandiAction(form: FormData) {
+export async function updateProductAction(form: FormData) {
   return act(form, async () => {
     const user = await requireEditor();
-    const res = await linkMandiName(await getDb(), user, str(form, "name"), str(form, "state"), needId(form, "mandiId", "mandi"));
-    return `Mandi name linked. ${res.listings} listings updated.`;
+    const has = (k: string) => form.has(k);
+    await updateProduct(await getDb(), user, needId(form, "productId", "product"), {
+      name: has("name") ? str(form, "name") : undefined,
+      form: has("form") ? str(form, "form") : undefined,
+      active: has("active") ? str(form, "active") === "true" : undefined,
+    });
+    return "Product saved.";
+  });
+}
+
+// ── Mandi name links and mandis ─────────────────────────────────────────────
+
+export async function decideMandiNameAction(form: FormData) {
+  return act(form, async () => {
+    const user = await requireEditor();
+    const s = status(form);
+    const res = await decideMandiName(await getDb(), user, needId(form, "id", "mandi name"), {
+      status: s, mandiId: s === "approved" ? needId(form, "mandiId", "mandi") : null, notes: str(form, "notes"),
+    });
+    return s === "approved" ? `Approved as ${res.mandiName}. ${res.listings} listings updated.` : s === "rejected" ? "Rejected." : "Moved back to pending.";
   });
 }
 
@@ -137,8 +178,12 @@ export async function createMandiAction(form: FormData) {
       name: str(form, "name"), state: str(form, "state"), district: str(form, "district"), postcode: str(form, "postcode"),
       lat: num(form, "lat"), lon: num(form, "lon"),
     });
-    const res = await linkMandiName(db, user, str(form, "name"), str(form, "state"), id);
-    return `Mandi created. ${res.listings} listings now point to it.`;
+    const linkId = toObjectId(str(form, "linkId"));
+    if (linkId) {
+      const res = await decideMandiName(db, user, linkId, { status: "approved", mandiId: id });
+      return `Mandi created and the name approved for it (${res.listings} listings).`;
+    }
+    return "Mandi created.";
   });
 }
 
@@ -149,6 +194,16 @@ export async function updateMandiAction(form: FormData) {
       district: str(form, "district"), postcode: str(form, "postcode"), lat: num(form, "lat"), lon: num(form, "lon"),
     });
     return "Mandi saved.";
+  });
+}
+
+// ── States ──────────────────────────────────────────────────────────────────
+
+export async function addStateSpellingAction(form: FormData) {
+  return act(form, async () => {
+    const user = await requireEditor();
+    const res = await addStateSpelling(await getDb(), user, str(form, "code"), str(form, "spelling"));
+    return `Spelling added. ${res.listings} listings now have this state.`;
   });
 }
 
@@ -175,15 +230,5 @@ export async function setReviewStatusAction(form: FormData) {
       counts: { items: res.modifiedCount },
     });
     return `${res.modifiedCount} item(s) marked as ${status}.`;
-  });
-}
-
-export async function scanAction(form: FormData) {
-  return act(form, async () => {
-    const user = await requireEditor();
-    const db = await getDb();
-    const res = await scanMapping(db, user.name);
-    await writeAudit(db, user, { action: "review.scan", summary: "Scanned current crop matching for problems", counts: res });
-    return `Scan done: ${res.unmapped} unmatched names, ${res.suspicious} matches that look wrong, ${res.duplicates} names in more than one group.`;
   });
 }

@@ -36,7 +36,7 @@ export default async function CollectionPage({ params, searchParams }: {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <SearchBox placeholder={def.searchVia === "markets" ? "Search by crop or mandi name…" : def.searchFields.length ? `Search ${def.searchFields.join(", ").replace(/_/g, " ")}…` : "Search by id…"} />
+        <SearchBox placeholder={def.searchVia === "listings" ? "Search by crop or mandi name…" : def.searchFields.length ? `Search ${def.searchFields.join(", ").replace(/_/g, " ")}…` : "Search by id…"} />
         {def.filters.map((f) =>
           f.type === "date" ? (
             <DateFilter key={f.key} param={f.key} label={f.label} />
@@ -69,7 +69,7 @@ export default async function CollectionPage({ params, searchParams }: {
                 <tr key={String(row._id)}>
                   {def.columns.map((c) => (
                     <td key={c.key}>
-                      <Cell row={row} col={c} collection={name} groupNames={res.groupNames} mandiNames={res.mandiNames} />
+                      <Cell row={row} col={c} collection={name} productNames={res.productNames} mandiNames={res.mandiNames} />
                     </td>
                   ))}
                   <td className="text-right">

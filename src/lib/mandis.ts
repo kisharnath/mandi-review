@@ -2,42 +2,15 @@ import "server-only";
 import { ObjectId, type Db } from "mongodb";
 import { writeAudit } from "./audit";
 import { COLL } from "./db";
-import { escapeRegex, normName } from "./format";
-import { closeReviewItems } from "./mapping";
+import { normName } from "./format";
 import type { SessionUser } from "./session";
 
 /**
- * A mandi name the scraper could not find in available_mandi is fixed by adding
- * the name to an existing mandi's aliases (the scraper matches aliases exactly),
- * then pointing the affected listings at that mandi.
+ * available_mandi keeps its existing schema. The website only creates mandis with
+ * the fields the collection already uses, and edits district / postcode / location.
+ * Mandi NAMES are linked to mandis through mandi_names (see catalog.ts), never by
+ * adding aliases here.
  */
-export async function linkMandiName(db: Db, user: SessionUser, rawName: string, state: string, mandiId: ObjectId) {
-  const name = normName(rawName);
-  const mandis = db.collection(COLL.mandis);
-  const mandi = await mandis.findOne({ _id: mandiId });
-  if (!mandi) throw new Error("That mandi no longer exists.");
-
-  if (normName(mandi.name) !== name) {
-    await mandis.updateOne({ _id: mandiId }, { $addToSet: { aliases: name }, $set: { updatedAt: new Date() } });
-  }
-  const listingFilter = {
-    market_name: { $regex: `^${escapeRegex(name)}$`, $options: "i" },
-    ...(state ? { state: { $regex: `^${escapeRegex(state)}$`, $options: "i" } } : {}),
-  };
-  const listings = await db.collection(COLL.markets).updateMany(listingFilter, { $set: { market_id: mandiId } });
-
-  await closeReviewItems(db, user, [`unknown_market|${normName(state)}|${name}`], {
-    action: "linked", mandi_id: mandiId, mandi_name: mandi.name,
-  });
-  await writeAudit(db, user, {
-    action: "mandi_name.link",
-    summary: `Linked mandi name "${name}" (${state || "any state"}) to ${mandi.name}`,
-    target: { name, state, mandi_id: mandiId },
-    counts: { listings: listings.modifiedCount },
-  });
-  return { listings: listings.modifiedCount };
-}
-
 export async function createMandi(
   db: Db,
   user: SessionUser,
@@ -46,15 +19,16 @@ export async function createMandi(
   const name = normName(input.name);
   const state = normName(input.state);
   if (!name || !state) throw new Error("Mandi name and state are required.");
+  const now = new Date();
   const doc: Record<string, unknown> = {
     name,
     state,
     district: input.district?.trim() || null,
     postcode: input.postcode?.trim() || null,
-    aliases: [name],
+    aliases: [],
     source: "review_app",
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: now,
+    updatedAt: now,
   };
   if (input.lat !== undefined && input.lon !== undefined && !Number.isNaN(input.lat) && !Number.isNaN(input.lon)) {
     doc.location = { type: "Point", coordinates: [input.lon, input.lat] };

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Empty, PageHeader } from "@/components/ui";
 import { COLL } from "@/lib/db";
 import { first, fmtDate, titleCase } from "@/lib/format";
-import { latestPriceDay, silentMandis } from "@/lib/stats";
+import { latestPriceDay, silentMandis, stateNames } from "@/lib/stats";
 
 export const maxDuration = 60;
 
@@ -15,11 +15,12 @@ export default async function StatePage({ params, searchParams }: {
   const sp = await searchParams;
   const day = first(sp.day) || (await latestPriceDay());
   const rows = await silentMandis(state, day);
+  const label = (await stateNames())[state] ?? state;
 
   return (
     <>
       <PageHeader
-        title={`${titleCase(state)}: mandis missing on ${fmtDate(day)}`}
+        title={`${titleCase(label)}: mandis missing on ${fmtDate(day)}`}
         description="These mandis sent prices in the 7 days before, but nothing on this day. Check whether the source site is down or the mandi was closed."
         actions={<Link href={`/?day=${day}`} className="btn-secondary">← Back to today</Link>}
       />

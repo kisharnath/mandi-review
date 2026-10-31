@@ -17,13 +17,16 @@ export default async function DocumentPage({ params }: { params: Promise<{ colle
 
   const links: { label: string; href: string }[] = [];
   const add = (label: string, href: string) => links.push({ label, href });
-  if (data.commodity_alias_lookup_id) add("Crop group", `/groups/${data.commodity_alias_lookup_id}`);
-  if (data.market_id) add("Mandi", `/mandis/${data.market_id}`);
-  if (data.market_commodity_id) add("Listing", `/data/${COLL.markets}/${data.market_commodity_id}`);
-  if (typeof data.commodity_name === "string") add("Crop matching", `/mapping?name=${encodeURIComponent(data.commodity_name)}`);
-  if (name === COLL.markets) add("Prices for this listing", `/data/${COLL.prices}?q=${id}`);
-  if (name === COLL.groups) add("Open group", `/groups/${id}`);
+  if (data.product_id) add("Product", `/data/${COLL.products}/${data.product_id}`);
+  if (data.mandi_id) add("Mandi", `/mandis/${data.mandi_id}`);
+  if (data.market_commodity_id) add("Listing", `/data/${COLL.listings}/${data.market_commodity_id}`);
+  if (data.crop_id) add("Crop", `/crops/${data.crop_id}`);
+  if (typeof data.commodity_name === "string") add("Crop name link", `/mapping?q=${encodeURIComponent(data.commodity_name)}&status=all`);
+  if (typeof data.market_name === "string") add("Mandi name link", `/mandi-links?q=${encodeURIComponent(data.market_name)}&status=all`);
+  if (name === COLL.listings) add("Prices for this listing", `/data/${COLL.prices}?q=${id}`);
+  if (name === COLL.crops) add("Open crop", `/crops/${id}`);
   if (name === COLL.mandis) add("Open mandi", `/mandis/${id}`);
+  if (name === COLL.products) add("Listings with this product", `/data/${COLL.listings}?q=${id}`);
 
   return (
     <>

@@ -7,6 +7,7 @@ test("flags names unrelated to their crop group", () => {
   assert.equal(looksWrong("she baffalo (for each)", "groundnut", ["groundnut"]), true);
   assert.equal(looksWrong("tur", "brinjal", ["brinjal", "tur"]), true);
   assert.equal(looksWrong("maida atta", "paddy", ["paddy", "paddy(common)", "maida atta"]), true);
+  assert.equal(looksWrong("other green and fresh vegetables", "paddy", ["paddy"]), true);
 });
 
 test("accepts qualifiers and spelling variants of the group name", () => {

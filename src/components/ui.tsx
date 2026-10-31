@@ -78,11 +78,8 @@ export function SectionTitle({ children, aside }: { children: ReactNode; aside?:
 
 export const TYPE_LABELS: Record<string, { label: string; tone: Tone }> = {
   run_failed: { label: "Scrape failed", tone: "red" },
-  unmapped_commodity: { label: "Crop not matched", tone: "amber" },
-  suspicious_mapping: { label: "Crop match looks wrong", tone: "violet" },
-  duplicate_alias: { label: "Name in many groups", tone: "violet" },
-  unknown_market: { label: "Mandi not found", tone: "blue" },
   price_invalid: { label: "Price looks wrong", tone: "red" },
+  unknown_state: { label: "Unknown state spelling", tone: "blue" },
 };
 
 export function TypeBadge({ type }: { type: string }) {

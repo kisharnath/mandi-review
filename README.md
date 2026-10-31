@@ -1,68 +1,56 @@
-# Mandi Data Review
+# Mandi Data Review (v2)
 
-A website for checking the mandi price data that the [Mandi scraper](https://github.com/vicharanashala/Mandi) collects, and for fixing crop and mandi matching.
+A website for checking the mandi price data that the [Mandi scraper](https://github.com/vicharanashala/Mandi) collects, and for deciding what each crop and mandi name means.
+
+This branch (`v2`) works on the **v2 database** (`PriceV2`), built by the scraper's `maintenance/migrate_v2.py`. The `main` branch is the v1 site for the old `Price` database.
 
 | Page | What it is for |
 | --- | --- |
-| **Today** | Prices saved per state for a day, how many usual mandis are missing, and the last scrape run |
-| **Scrape runs** | Every run, per source: worked or failed, records fetched and saved, the error |
-| **Review list** | Problems to check: failed scrapes, crop names not matched, matches that look wrong, unknown mandis, odd prices. Fix them or mark them checked, one by one or in bulk |
-| **Crop matching** | Every crop name mandis use, its crop group, and flags. Search, pick a name, match it to the right group or create a new one |
-| **Crop groups** | Each group with all its names; rename, turn off, or remove a wrong name |
-| **Mandis** | Every mandi; edit district, postcode and location |
-| **All data** | Every collection in the database, with search, filters, paging and a full view of any record |
-| **Change history** | Who changed what, when, and how many rows it touched |
+| **Today** | Prices saved per state for a day, how many farmers can see (approved product), missing mandis, the last scrape run |
+| **Scrape runs** | Every run, per source: worked or failed, records fetched and saved, per-state counts, the error |
+| **Review list** | Counts of names waiting for review, plus failed scrapes, odd prices and unknown state spellings |
+| **Crop names** | Every crop name each source uses. Approve it as a product, reject it, or create the crop/product it needs. Tabs: Pending, Double-check (approved by the migration, not by a person), Approved, Rejected |
+| **Mandi names** | Every mandi name each source uses in a state. Approve it as an `available_mandi` record, reject it, or add a new mandi |
+| **Crops & products** | Crops, their products and default product, and every name approved for each product |
+| **Mandis** | Every mandi; edit district, postcode and location (the `available_mandi` schema is not changed) |
+| **States** | Every spelling the sources use for each state |
+| **All data** | Every collection, with search, filters, paging and a full view of any record |
+| **Change history** | Who changed what, when, before and after |
 
-## How matching works (read before changing data)
+## How a decision takes effect
 
-The scraper matches a crop name to a crop group by an **exact** match against the group's `aliases`, and writes the result onto every listing on every run. So the website changes the group's `aliases` (the source of truth) **and** the listings (`markets_commodities`) **and** the prices (`price_records`). The next scrape then gives the same answer. Mandi names work the same way through `available_mandi.aliases`.
+The scraper copies `product_id` / `mandi_id` onto listings **only from approved rows** in `crop_names` and `mandi_names`, on every run. When you approve, change or reject a name here, the website updates that row and immediately refreshes the matching `listings`. Price records are never rewritten: a price points only at its listing.
 
-A name is only ever kept in one crop group, so the scraper's exact match can't be ambiguous.
+- **Pending** names show no price to farmers. That is deliberate: no price is better than a wrong one.
+- **Approved by migration** means the old (v1) match was unambiguous and plausible, but nobody has checked it. Work through the *Double-check* tab.
+- A name can mean different products for different varieties (agmarknet "paddy" with variety "basmati"). Use *One variety means a different product* on the crop name page.
 
-The website writes to the live database. Every change is recorded in `audit_log` with before and after values.
-
-## Collections
-
-Reads `markets_commodities`, `price_records`, `available_mandi` and `commodity_alias_lookup`. Also uses:
-
-- `ingestion_runs`: written by the scraper (branch `fix/review-pipeline`), one document per source per run
-- `review_items`: written by the scraper and by "Scan current data"; one document per problem, keyed so repeats update the same item
-- `audit_log`: written by this website
+Every change is written to `audit_log`.
 
 ## Run locally
 
 ```bash
-cp .env.example .env.local   # fill in MONGODB_URI, APP_USERS, AUTH_SECRET
+cp .env.example .env.local   # MONGODB_URI, MONGODB_DB=PriceV2, APP_USERS, AUTH_SECRET
 npm install
 npm run dev                  # http://localhost:3000
 ```
 
 ## Deploy on Vercel
 
-1. Push this repo to GitHub, then import it in Vercel (framework: Next.js, no build settings to change).
-2. In **Settings → Environment Variables** add `MONGODB_URI`, `MONGODB_DB`, `APP_USERS` and `AUTH_SECRET` (see `.env.example`).
-3. In MongoDB Atlas **Network Access**, allow Vercel to connect. Vercel has no fixed IPs on most plans, so this usually means `0.0.0.0/0`; the database user's password is then the only protection, so use a strong one and a user limited to this database.
-4. Some pages run large queries. They declare `maxDuration = 60`, which Vercel allows on all plans.
+1. Push this repo to GitHub and import it in Vercel (framework: Next.js). Deploy the `v2` branch, or merge it to `main`.
+2. In **Settings → Environment Variables** set `MONGODB_URI`, `MONGODB_DB` (`PriceV2`), `APP_USERS`, `AUTH_SECRET`.
+3. In MongoDB Atlas **Network Access**, allow Vercel to connect (usually `0.0.0.0/0`), and give the database user `readWrite` on the v2 database only.
+4. Heavy pages declare `maxDuration = 60`, which Vercel allows on all plans.
 
 ## Users
 
-`APP_USERS="name:password:role,..."` where role is `admin`, `reviewer` (both can change data) or `viewer` (read only). Sessions last 7 days.
-
-## First-time cleanup of existing data
-
-The existing groups contain many wrong matches (for example `hen` under groundnut, `tur` under brinjal). To list them all in the review list without changing anything:
-
-```bash
-npm run scan        # or press "Scan current data" on the Review list page
-```
-
-Then work through **Crop matching → Looks wrong / Not matched**.
+`APP_USERS="name:password:role,..."` where role is `admin`, `reviewer` (both can change data) or `viewer` (read only). `AUTH_SECRET` must be at least 32 characters (`openssl rand -base64 48`).
 
 ## Tests
 
 ```bash
-npm test                                                     # matching rules
+npm test                                                     # name-check rules
 TEST_MONGODB_URI=mongodb://127.0.0.1:27017 npm run test:db   # every data change, on a throwaway database
 ```
 
-`test:db` creates and drops its own database. Never point it at production.
+`test:db` creates and drops its own database. Never point it at a real one.
