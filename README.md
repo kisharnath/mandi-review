@@ -7,8 +7,10 @@ This branch (`v2`) works on the **v2 collections**, built by the scraper's `main
 | Page | What it is for |
 | --- | --- |
 | **Today** | Prices saved per state for a day, how many farmers can see (approved product), missing mandis, the last scrape run |
+| **Statistics** | The whole database at a glance: prices per day for 30 days, share of listings with a product and a mandi by state and source, name-link status, wrong prices by problem, mandis with a location |
 | **Scrape runs** | Every run, per source: worked or failed, records fetched and saved, per-state counts, the error |
 | **Review list** | Counts of names waiting for review, plus failed scrapes, odd prices and unknown state spellings |
+| **Wrong prices** | Prices that cannot be right (0 or below, min above max, modal outside min–max, no price at all, no modal). Edit a price, or tick rows and delete them; admins can delete every match of one problem at once (up to 10,000) |
 | **Crop names** | Every crop name each source uses. Approve it as a product, reject it, or create the crop/product it needs. Tabs: Pending, Double-check (approved by the migration, not by a person), Approved, Rejected |
 | **Mandi names** | Every mandi name each source uses in a state. Approve it as an `available_mandi` record, reject it, or add a new mandi |
 | **Farmer words** | Words farmers use for a crop (dhan, धान, jhona) and the product they mean. Pending words (claimed by two crops, or looking wrong) give no answer until approved; add missing words here |
@@ -27,6 +29,8 @@ The scraper copies `product_id` / `mandi_id` onto listings **only from approved 
 - A name can mean different products for different varieties (agmarknet "paddy" with variety "basmati"). Use *One variety means a different product* on the crop name page.
 
 Every change is written to `audit_log`.
+
+**Wrong prices.** A deleted price is first copied to `deleted_price_records` with who deleted it, when and why; copy it back to `price_records` to undo. An edit keeps the scraped values in `price_before_edit`. Both close the matching "price looks wrong" item on the Review list. Prices that have min and max but no modal (almost all Meghalaya, whose modal field the scraper does not read yet) are real prices: they can be edited or deleted one by one, but not deleted in bulk.
 
 ## Run locally
 

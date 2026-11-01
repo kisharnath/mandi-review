@@ -2,8 +2,8 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
-import { checkLogin, requireEditor } from "@/lib/auth";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { checkLogin, requireAdmin, requireEditor } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { COLL, getDb } from "@/lib/db";
 import { toObjectId } from "@/lib/format";
@@ -13,6 +13,7 @@ import {
   type Status,
 } from "@/lib/catalog";
 import { createMandi, updateMandi } from "@/lib/mandis";
+import { deletePrices, editPrice, isProblem } from "@/lib/prices";
 import { SESSION_COOKIE, SESSION_MAX_AGE, signSession } from "@/lib/session";
 
 /** Only allow redirects back into this site. */
@@ -252,5 +253,38 @@ export async function setReviewStatusAction(form: FormData) {
       counts: { items: res.modifiedCount },
     });
     return `${res.modifiedCount} item(s) marked as ${status}.`;
+  });
+}
+
+// ── Wrong prices ─────────────────────────────────────────────────────────────
+
+export async function deletePricesAction(form: FormData) {
+  return act(form, async () => {
+    const db = await getDb();
+    const reason = str(form, "reason");
+    if (str(form, "all") === "1") {
+      const user = await requireAdmin();
+      const problem = str(form, "problem");
+      const res = await deletePrices(db, user, {
+        all: { problem: isProblem(problem) ? problem : undefined, state: str(form, "state") || undefined, date: str(form, "date") || undefined },
+      }, reason);
+      revalidateTag("prices");
+      return `Deleted ${res.deleted} price(s); copies kept. ${res.closed} review item(s) closed.`;
+    }
+    const user = await requireEditor();
+    const ids = form.getAll("ids").map((v) => toObjectId(String(v))).filter((v) => v !== null);
+    const res = await deletePrices(db, user, { ids }, reason);
+    revalidateTag("prices");
+    return `Deleted ${res.deleted} price(s); copies kept. ${res.closed} review item(s) closed.`;
+  });
+}
+
+export async function editPriceAction(form: FormData) {
+  return act(form, async () => {
+    const user = await requireEditor();
+    const val = (k: string) => (str(form, k) === "" ? null : Number(str(form, k)));
+    await editPrice(await getDb(), user, needId(form, "id", "price"), { min: val("min"), max: val("max"), modal: val("modal") });
+    revalidateTag("prices");
+    return "Price saved.";
   });
 }

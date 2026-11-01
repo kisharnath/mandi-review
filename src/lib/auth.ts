@@ -53,6 +53,13 @@ export async function requireEditor(): Promise<SessionUser> {
   return user;
 }
 
+/** For changes too big for a reviewer, such as deleting every matching price at once. */
+export async function requireAdmin(): Promise<SessionUser> {
+  const user = await requireUser();
+  if (user.role !== "admin") throw new Error("Only an admin can do this.");
+  return user;
+}
+
 export function canEdit(user: SessionUser | null): boolean {
   return !!user && user.role !== "viewer";
 }

@@ -14,6 +14,7 @@ import {
 } from "../src/lib/catalog";
 import { COLL } from "../src/lib/db";
 import { createMandi } from "../src/lib/mandis";
+import { badPriceCounts, deletePrices, editPrice, listBadPrices } from "../src/lib/prices";
 
 const uri = process.env.TEST_MONGODB_URI;
 if (!uri) throw new Error("Set TEST_MONGODB_URI to a throwaway MongoDB");
@@ -160,4 +161,61 @@ test("farmer words: approve, add, refuse duplicates, reject", async () => {
   await decideCropWord(db, user, insertedId, { status: "rejected" });
   assert.equal((await db.collection(COLL.cropWords).findOne({ _id: insertedId }))!.product_id, null);
   assert.equal(await db.collection(COLL.audit).countDocuments({ action: /^crop_word\./ }), 3); // refused attempts write nothing
+});
+
+test("wrong prices: listed by problem, deleted with a copy kept, edited with checks", async () => {
+  const day = new Date("2026-10-29");
+  const p = db.collection(COLL.prices);
+  const { insertedIds } = await p.insertMany([
+    { market_commodity_id: ids.l1, date: day, min_price: 0, max_price: 0, modal_price: 0 },
+    { market_commodity_id: ids.l2, date: day, min_price: 3000, max_price: 2000, modal_price: 2500 },
+    { market_commodity_id: ids.l3, date: day, min_price: 2000, max_price: 3000, modal_price: 3500 },
+    { market_commodity_id: ids.l4, date: day, min_price: null, max_price: null, modal_price: 2400 }, // modal only: fine
+    { market_commodity_id: ids.l5, date: day, min_price: 2000, max_price: 3000, modal_price: 2500 }, // fine
+    { market_commodity_id: ids.l5, date: new Date("2026-10-30"), min_price: 2000, max_price: 3000, modal_price: null }, // real, modal not read
+    { market_commodity_id: ids.l5, date: new Date("2026-10-31"), min_price: null, max_price: null, modal_price: null },
+  ]);
+  const [zero, minAbove, modalOut, modalOnly, good, noModal, empty] = Object.values(insertedIds);
+  await db.collection(COLL.review).insertOne({
+    key: "k", type: "price_invalid", status: "open",
+    details: { market_name: "pendurti", commodity_name: "paddy(common)", date: "2026-10-29" },
+  });
+
+  const counts = await badPriceCounts(db);
+  assert.deepEqual(counts, { zero: 1, min_above_max: 1, modal_outside: 1, no_price: 1, modal_missing: 1 });
+  const listed = await listBadPrices(db, { state: "andhra-pradesh" }, 1, 50);
+  assert.equal(listed.total, 5); // the five wrong ones; l4's modal-only price and l5's good price are not listed
+  assert.equal(listed.rows[0].mc?.market_name !== undefined, true);
+
+  // Good prices are never deleted, even when ticked.
+  await assert.rejects(deletePrices(db, user, { ids: [good, modalOnly] }, "test"), /nothing was deleted/);
+  const res = await deletePrices(db, user, { ids: [zero, good] }, "all zero");
+  assert.deepEqual(res, { deleted: 1, closed: 1 });
+  assert.equal(await p.countDocuments({ _id: zero }), 0);
+  assert.equal(await p.countDocuments({ _id: good }), 1);
+  const copy = await db.collection(COLL.deletedPrices).findOne({ _id: zero });
+  assert.equal(copy!.deleted_by, "tester");
+  assert.equal(copy!.delete_reason, "all zero");
+  assert.deepEqual(copy!.problems, ["zero"]);
+  assert.equal((await db.collection(COLL.review).findOne({ key: "k" }))!.status, "resolved");
+
+  await assert.rejects(editPrice(db, user, minAbove, { min: 3000, max: 2000, modal: 2500 }), /Min price cannot be above/);
+  await assert.rejects(editPrice(db, user, minAbove, { min: 2000, max: 3000, modal: 0 }), /above 0/);
+  await editPrice(db, user, minAbove, { min: 2000, max: 3000, modal: 2500 });
+  await editPrice(db, user, minAbove, { min: 2100, max: 3000, modal: 2500 });
+  const edited = await p.findOne({ _id: minAbove });
+  assert.equal(edited!.min_price, 2100);
+  assert.deepEqual(edited!.price_before_edit, { min_price: 3000, max_price: 2000, modal_price: 2500 }); // first scraped values kept
+
+  // Real prices missing only their modal can't be bulk-deleted, and delete-all needs one problem.
+  await assert.rejects(deletePrices(db, user, { all: { problem: "modal_missing" } }, ""), /not on prices that only lack a modal/);
+  await assert.rejects(deletePrices(db, user, { all: {} }, ""), /one problem at a time/);
+  assert.equal(await p.countDocuments({ _id: noModal }), 1);
+  assert.equal((await deletePrices(db, user, { all: { problem: "no_price" } }, "")).deleted, 1);
+  assert.equal(await p.countDocuments({ _id: empty }), 0);
+  const all = await deletePrices(db, user, { all: { problem: "modal_outside" } }, "");
+  assert.equal(all.deleted, 1);
+  assert.equal(await p.countDocuments({ _id: modalOut }), 0);
+  assert.deepEqual(await badPriceCounts(db), { zero: 0, min_above_max: 0, modal_outside: 0, no_price: 0, modal_missing: 1 });
+  assert.equal(await db.collection(COLL.audit).countDocuments({ action: /^price\./ }), 5);
 });

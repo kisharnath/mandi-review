@@ -67,6 +67,27 @@ export const COLLECTIONS: CollectionDef[] = [
     sort: { date: -1 },
   },
   {
+    name: COLL.deletedPrices,
+    label: "Deleted prices",
+    description: "Copies of prices deleted on the Wrong prices page, with who deleted them and why. Copy one back to price_records to undo.",
+    searchFields: ["deleted_by", "delete_reason"],
+    filters: [
+      { key: "deleted_by", label: "Deleted by", type: "select" },
+      { key: "date", label: "Date", type: "date" },
+    ],
+    columns: [
+      { key: "date", label: "Price date", kind: "date" },
+      { key: "min_price", label: "Min ₹", kind: "number" },
+      { key: "max_price", label: "Max ₹", kind: "number" },
+      { key: "modal_price", label: "Modal ₹", kind: "number" },
+      { key: "problems", label: "Problems", kind: "list" },
+      { key: "deleted_by", label: "Deleted by" },
+      { key: "deleted_at", label: "Deleted", kind: "datetime" },
+      { key: "delete_reason", label: "Reason" },
+    ],
+    sort: { deleted_at: -1 },
+  },
+  {
     name: COLL.cropNames,
     label: "Crop name links",
     description: "Each crop name a source uses, and the product a person approved for it.",

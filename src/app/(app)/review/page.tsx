@@ -105,7 +105,7 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
             <table className="table-base">
               <thead>
                 <tr>
-                  {editor && <th className="w-8"><SelectAll name="ids" /></th>}
+                  {editor && <th className="w-8"><SelectAll name="ids" form="bulk" /></th>}
                   <th>Problem</th>
                   <th>Where</th>
                   <th className="text-right">Records</th>
@@ -154,7 +154,7 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
                             <SubmitButton>Add</SubmitButton>
                           </form>
                         ) : it.type === "price_invalid" ? (
-                          <Link className="btn-secondary" href={`/data/${COLL.prices}?q=${encodeURIComponent(String(d.market_name ?? ""))}&date=${String(d.date ?? "")}`}>See prices →</Link>
+                          <Link className="btn-secondary" href={`/prices${d.date ? `?date=${String(d.date)}` : ""}`}>Fix or delete →</Link>
                         ) : it.type === "run_failed" ? (
                           <Link className="btn-secondary" href="/runs?status=failed">See runs →</Link>
                         ) : null}

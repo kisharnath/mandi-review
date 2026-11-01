@@ -20,6 +20,7 @@ export const COLL = {
   runs: process.env.INGESTION_RUNS_COLLECTION || `${P}ingestion_runs`,
   review: process.env.REVIEW_ITEMS_COLLECTION || `${P}review_items`,
   audit: process.env.AUDIT_COLLECTION || `${P}audit_log`,
+  deletedPrices: process.env.DELETED_PRICES_COLLECTION || `${P}deleted_price_records`,
 } as const;
 
 /** Upper bound for any single query, so a slow page never hangs a serverless function. */

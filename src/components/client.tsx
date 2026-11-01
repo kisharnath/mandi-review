@@ -227,16 +227,24 @@ export function Picker({ kind, name, state, placeholder, initial }: {
   );
 }
 
-/** Checkbox that toggles every checkbox with the same name inside its form. */
-export function SelectAll({ name }: { name: string }) {
+/**
+ * Checkbox that toggles every checkbox with the same name in a form, including boxes
+ * outside the <form> element that join it with form="<id>" (rows of a table).
+ */
+export function SelectAll({ name, form }: { name: string; form?: string }) {
   return (
     <input
       type="checkbox"
+      form={form}
       aria-label="Select all"
       className="h-4 w-4 accent-emerald-700"
       onChange={(e) => {
-        const form = e.currentTarget.form;
-        form?.querySelectorAll<HTMLInputElement>(`input[type=checkbox][name="${name}"]`).forEach((c) => (c.checked = e.currentTarget.checked));
+        const checked = e.currentTarget.checked;
+        const owner = e.currentTarget.form;
+        if (!owner) return;
+        for (const el of Array.from(owner.elements)) {
+          if (el instanceof HTMLInputElement && el.type === "checkbox" && el.name === name) el.checked = checked;
+        }
       }}
     />
   );
