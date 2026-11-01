@@ -9,7 +9,8 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { MongoClient, ObjectId, type Db } from "mongodb";
 import {
-  addStateSpelling, addVarietyLink, createCrop, createProduct, decideCropName, decideMandiName, linkCounts, updateCrop,
+  addCropWord, addStateSpelling, addVarietyLink, createCrop, createProduct, decideCropName, decideCropWord, decideMandiName,
+  linkCounts, updateCrop, wordKey,
 } from "../src/lib/catalog";
 import { COLL } from "../src/lib/db";
 import { createMandi } from "../src/lib/mandis";
@@ -64,7 +65,7 @@ after(async () => {
 const listing = (id: ObjectId) => db.collection(COLL.listings).findOne({ _id: id });
 
 test("counts pending and migration-approved links", async () => {
-  assert.deepEqual(await linkCounts(db), { cropPending: 2, cropCheck: 1, mandiPending: 1, mandiCheck: 0 });
+  assert.deepEqual(await linkCounts(db), { cropPending: 2, cropCheck: 1, mandiPending: 1, mandiCheck: 0, wordPending: 0, wordCheck: 0 });
 });
 
 test("approving a crop name sets the product on its listings, records who decided, and leaves prices alone", async () => {
@@ -130,4 +131,33 @@ test("adding a state spelling fills state_code on listings and refuses spellings
   assert.equal(res.listings, 1);
   assert.equal((await listing(ids.l5))!.state_code, "andhra-pradesh");
   await assert.rejects(addStateSpelling(db, user, "telangana", "a.p."), /already belongs/);
+});
+
+test("word key matches the scraper and the tool", () => {
+  assert.equal(wordKey("Bengal Gram(Gram)(Whole)"), "bengal gram whole");
+  assert.equal(wordKey("Ginger (Dry)"), wordKey("dry ginger"));
+  assert.equal(wordKey("धान"), "धान");
+  assert.equal(wordKey("मूंगफली (दाना)"), wordKey("दाना मूंगफली"));
+});
+
+test("farmer words: approve, add, refuse duplicates, reject", async () => {
+  const { insertedId } = await db.collection(COLL.cropWords).insertOne({
+    key: "rice", word: "rice", crop_id: null, product_id: null, status: "pending",
+    suggestion: { reason: "claimed by 2 crops" }, sources: ["v1_alias", "crop_master:Telugu"],
+  });
+  await assert.rejects(decideCropWord(db, user, insertedId, { status: "approved" }), /Choose the product/);
+  const label = await decideCropWord(db, user, insertedId, { status: "approved", productId: ids.paddy });
+  assert.equal(label, "paddy");
+  const row = await db.collection(COLL.cropWords).findOne({ _id: insertedId });
+  assert.equal(String(row!.crop_id), String(ids.paddyCrop));
+  assert.equal(row!.decided_by, "tester");
+
+  await addCropWord(db, user, "Moong Phali", ids.groundnut, "Hindi");
+  const added = await db.collection(COLL.cropWords).findOne({ key: "moong phali" });
+  assert.equal(added!.status, "approved");
+  await assert.rejects(addCropWord(db, user, "phali moong", ids.groundnut), /already in the list/);
+
+  await decideCropWord(db, user, insertedId, { status: "rejected" });
+  assert.equal((await db.collection(COLL.cropWords).findOne({ _id: insertedId }))!.product_id, null);
+  assert.equal(await db.collection(COLL.audit).countDocuments({ action: /^crop_word\./ }), 3); // refused attempts write nothing
 });

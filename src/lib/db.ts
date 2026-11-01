@@ -15,6 +15,7 @@ export const COLL = {
   products: process.env.PRODUCTS_COLLECTION || `${P}products`,
   cropNames: process.env.CROP_NAMES_COLLECTION || `${P}crop_names`,
   mandiNames: process.env.MANDI_NAMES_COLLECTION || `${P}mandi_names`,
+  cropWords: process.env.CROP_WORDS_COLLECTION || `${P}crop_words`,
   states: process.env.STATES_COLLECTION || `${P}states`,
   runs: process.env.INGESTION_RUNS_COLLECTION || `${P}ingestion_runs`,
   review: process.env.REVIEW_ITEMS_COLLECTION || `${P}review_items`,

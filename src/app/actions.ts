@@ -8,7 +8,8 @@ import { writeAudit } from "@/lib/audit";
 import { COLL, getDb } from "@/lib/db";
 import { toObjectId } from "@/lib/format";
 import {
-  addStateSpelling, addVarietyLink, createCrop, createProduct, decideCropName, decideMandiName, updateCrop, updateProduct,
+  addCropWord, addStateSpelling, addVarietyLink, createCrop, createProduct, decideCropName, decideCropWord, decideMandiName,
+  updateCrop, updateProduct,
   type Status,
 } from "@/lib/catalog";
 import { createMandi, updateMandi } from "@/lib/mandis";
@@ -97,6 +98,27 @@ export async function addVarietyAction(form: FormData) {
     const user = await requireEditor();
     await addVarietyLink(await getDb(), user, needId(form, "id", "crop name"), str(form, "variety"));
     return "Variety added as a pending link. Approve it to give that variety its own product.";
+  });
+}
+
+// ── Farmer words ─────────────────────────────────────────────────────────────
+
+export async function decideCropWordAction(form: FormData) {
+  return act(form, async () => {
+    const user = await requireEditor();
+    const s = status(form);
+    const label = await decideCropWord(await getDb(), user, needId(form, "id", "word"), {
+      status: s, productId: s === "approved" ? needId(form, "productId", "product") : null, notes: str(form, "notes"),
+    });
+    return s === "approved" ? `Approved: farmers saying this now get ${label} prices.` : s === "rejected" ? "Rejected." : "Moved back to pending.";
+  });
+}
+
+export async function addCropWordAction(form: FormData) {
+  return act(form, async () => {
+    const user = await requireEditor();
+    await addCropWord(await getDb(), user, str(form, "word"), needId(form, "productId", "product"), str(form, "language"));
+    return "Word added.";
   });
 }
 

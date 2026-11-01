@@ -39,7 +39,10 @@ function related(a: string, b: string): boolean {
   const n = Math.min(4, a.length, b.length);
   if (a.slice(0, n) === b.slice(0, n) || a.includes(b) || b.includes(a)) return true;
   // Spelling variants: "soyabean"/"soybean", "raddish"/"radish", "cummin"/"cumin".
-  return Math.min(a.length, b.length) >= 5 && editDistance(a, b) <= Math.max(1, Math.floor(Math.max(a.length, b.length) / 5));
+  if (Math.min(a.length, b.length) < 5 || editDistance(a, b) > Math.max(1, Math.floor(Math.max(a.length, b.length) / 5))) return false;
+  // In short words only a missing or extra letter counts ("cummin"/"cumin"); a changed
+  // letter often makes a different crop ("chana"/"chafa").
+  return Math.min(a.length, b.length) >= 7 || a.length !== b.length;
 }
 
 export type NameFlag = "unmatched" | "looks_wrong" | "other_script" | "in_many_groups";

@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Activity, Database, Flag, History, LayoutDashboard, ListChecks, LogOut, MapPin, Shuffle, Signpost, Sprout } from "lucide-react";
+import { Activity, Database, Flag, History, LayoutDashboard, ListChecks, LogOut, MapPin, MessageSquareText, Shuffle, Signpost, Sprout } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -11,6 +11,7 @@ const linksFor = (mandis: string, audit: string) => [
   { href: "/review", label: "Review list", icon: ListChecks },
   { href: "/mapping", label: "Crop names", icon: Shuffle },
   { href: "/mandi-links", label: "Mandi names", icon: Signpost },
+  { href: "/crop-words", label: "Farmer words", icon: MessageSquareText },
   { href: "/crops", label: "Crops & products", icon: Sprout },
   { href: `/data/${mandis}`, label: "Mandis", icon: MapPin },
   { href: "/state-names", label: "States", icon: Flag },

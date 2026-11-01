@@ -11,6 +11,7 @@ This branch (`v2`) works on the **v2 collections**, built by the scraper's `main
 | **Review list** | Counts of names waiting for review, plus failed scrapes, odd prices and unknown state spellings |
 | **Crop names** | Every crop name each source uses. Approve it as a product, reject it, or create the crop/product it needs. Tabs: Pending, Double-check (approved by the migration, not by a person), Approved, Rejected |
 | **Mandi names** | Every mandi name each source uses in a state. Approve it as an `available_mandi` record, reject it, or add a new mandi |
+| **Farmer words** | Words farmers use for a crop (dhan, धान, jhona) and the product they mean. Pending words (claimed by two crops, or looking wrong) give no answer until approved; add missing words here |
 | **Crops & products** | Crops, their products and default product, and every name approved for each product |
 | **Mandis** | Every mandi; edit district, postcode and location (the `available_mandi` schema is not changed) |
 | **States** | Every spelling the sources use for each state |

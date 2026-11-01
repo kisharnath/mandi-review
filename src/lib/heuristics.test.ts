@@ -15,6 +15,7 @@ test("accepts qualifiers and spelling variants of the group name", () => {
   assert.equal(looksWrong("bajra(pearl millet/cumbu)", "pearl millet", []), false);
   assert.equal(looksWrong("soyabean", "soybean", []), false);
   assert.equal(looksWrong("raddish", "radish", []), false);
+  assert.equal(looksWrong("chana", "chafa", ["chafa"]), true);
   assert.equal(looksWrong("cummin seed(jeera)", "cumin", []), false);
 });
 

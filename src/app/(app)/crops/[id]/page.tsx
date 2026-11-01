@@ -4,7 +4,7 @@ import { createProductAction, updateCropAction, updateProductAction } from "@/ap
 import { SubmitButton } from "@/components/client";
 import { Badge, Flash, PageHeader, SectionTitle } from "@/components/ui";
 import { canEdit, requireUser } from "@/lib/auth";
-import type { CropDoc, CropNameDoc, ProductDoc } from "@/lib/catalog";
+import type { CropDoc, CropNameDoc, CropWordDoc, ProductDoc } from "@/lib/catalog";
 import { COLL, getDb, MAX_TIME_MS } from "@/lib/db";
 import { first, fmtNumber, titleCase, toObjectId } from "@/lib/format";
 import { looksWrong } from "@/lib/heuristics";
@@ -27,9 +27,10 @@ export default async function CropPage({ params, searchParams }: {
 
   const products = await db.collection<ProductDoc>(COLL.products).find({ crop_id: oid }).sort({ name: 1 }).toArray();
   const pids = products.map((p) => p._id);
-  const [names, listingCounts] = await Promise.all([
+  const [names, listingCounts, words] = await Promise.all([
     db.collection<CropNameDoc>(COLL.cropNames).find({ product_id: { $in: pids } }).sort({ listings: -1 }).limit(500).toArray(),
     db.collection(COLL.listings).aggregate<{ _id: unknown; n: number }>([{ $match: { product_id: { $in: pids } } }, { $group: { _id: "$product_id", n: { $sum: 1 } } }], { maxTimeMS: MAX_TIME_MS }).toArray(),
+    db.collection<CropWordDoc>(COLL.cropWords).find({ crop_id: oid, status: "approved" }, { projection: { word: 1, languages: 1, product_id: 1 } }).sort({ word: 1 }).limit(300).toArray(),
   ]);
   const listingsOf = new Map(listingCounts.map((c) => [String(c._id), c.n]));
   const back = `/crops/${id}`;
@@ -102,8 +103,25 @@ export default async function CropPage({ params, searchParams }: {
           })}
         </div>
 
+        <div className="space-y-4">
+          <div className="card p-5">
+            <SectionTitle aside={<Link className="text-xs font-medium text-emerald-700 hover:underline" href={`/crop-words?status=all&q=`}>All words →</Link>}>
+              Farmer words ({fmtNumber(words.length)})
+            </SectionTitle>
+            {words.length === 0 ? (
+              <p className="text-sm text-zinc-500">No approved farmer words yet.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {words.map((w) => (
+                  <Link key={String(w._id)} href={`/crop-words?status=all&id=${String(w._id)}`} title={(w.languages ?? []).join(", ")} className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700 hover:bg-emerald-50 hover:text-emerald-800">
+                    {w.word}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         {editor && (
-          <div className="space-y-4">
+          <>
             <form action={updateCropAction} className="card space-y-3 p-5">
               <SectionTitle>Crop</SectionTitle>
               <input type="hidden" name="back" value={back} />
@@ -142,8 +160,9 @@ export default async function CropPage({ params, searchParams }: {
               </select>
               <SubmitButton className="btn-secondary">Add</SubmitButton>
             </form>
-          </div>
+          </>
         )}
+        </div>
       </div>
     </>
   );

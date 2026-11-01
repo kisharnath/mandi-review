@@ -62,11 +62,13 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
       <PageHeader title="Review list" description="Everything waiting for a person. Name links are reviewed on their own pages; other problems are listed below." />
       <Flash msg={first(sp.msg)} err={first(sp.err)} />
 
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label="Crop names pending" value={fmtNumber(links.cropPending)} hint="no price shown until approved" href="/mapping" tone={links.cropPending ? "warn" : undefined} />
         <StatCard label="Crop names to double-check" value={fmtNumber(links.cropCheck)} hint="approved by the migration, not by a person" href="/mapping?status=check" />
         <StatCard label="Mandi names pending" value={fmtNumber(links.mandiPending)} hint="prices not tied to a mandi" href="/mandi-links" tone={links.mandiPending ? "warn" : undefined} />
         <StatCard label="Mandi names to double-check" value={fmtNumber(links.mandiCheck)} hint="approved by the migration, not by a person" href="/mandi-links?status=check" />
+        <StatCard label="Farmer words pending" value={fmtNumber(links.wordPending)} hint="claimed by two crops, or looks wrong" href="/crop-words" tone={links.wordPending ? "warn" : undefined} />
+        <StatCard label="Farmer words to double-check" value={fmtNumber(links.wordCheck)} hint="added by the seed, not by a person" href="/crop-words?status=check" />
       </div>
 
       <h2 className="mb-3 text-sm font-semibold text-zinc-800">Other problems</h2>

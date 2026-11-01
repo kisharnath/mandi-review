@@ -110,6 +110,27 @@ export const COLLECTIONS: CollectionDef[] = [
     sort: { listings: -1 },
   },
   {
+    name: COLL.cropWords,
+    label: "Farmer words",
+    description: "Words farmers use for a crop, and the crop or product a person approved for them.",
+    searchFields: ["word", "key", "notes"],
+    filters: [
+      { key: "status", label: "Status", type: "select" },
+      { key: "languages", label: "Language", type: "select" },
+      { key: "decided_by", label: "Decided by", type: "select" },
+    ],
+    columns: [
+      { key: "word", label: "Word" },
+      { key: "status", label: "Status", kind: "status" },
+      { key: "product_id", label: "Product", kind: "product" },
+      { key: "crop_id", label: "Crop id", kind: "id" },
+      { key: "languages", label: "Languages", kind: "list" },
+      { key: "sources", label: "From", kind: "list" },
+      { key: "decided_by", label: "Decided by" },
+    ],
+    sort: { word: 1 },
+  },
+  {
     name: COLL.crops,
     label: "Crops",
     description: "Crops, each with a default product used when a farmer names only the crop.",
