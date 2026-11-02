@@ -46,6 +46,7 @@ npm run dev                  # http://localhost:3000
 2. In **Settings → Environment Variables** set `MONGODB_URI`, `MONGODB_DB` (`Price`), `V2_COLLECTION_PREFIX` (`v2_`), `APP_USERS`, `AUTH_SECRET`.
 3. In MongoDB Atlas **Network Access**, allow Vercel to connect (usually `0.0.0.0/0`), and use a database user with `readWrite` on `Price`.
 4. Heavy pages declare `maxDuration = 60`, which Vercel allows on all plans.
+5. `vercel.json` runs the site in Mumbai (`bom1`), next to the database (Atlas `asia-south1`). Every page makes several database calls, so a site running far from the database (Vercel's default is Washington, `iad1`) is several times slower. If the project's Function Region setting overrides it, set it to Mumbai there too.
 
 ## Users
 

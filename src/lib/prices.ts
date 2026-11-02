@@ -1,6 +1,6 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
-import type { Db, Document, Filter, ObjectId } from "mongodb";
+import { ObjectId, type Db, type Document, type Filter } from "mongodb";
 import { writeAudit } from "./audit";
 import { COLL, getDb } from "./db";
 import { isoDay } from "./format";
@@ -110,29 +110,77 @@ function pipelineFor(q: BadPriceQuery): Document[] {
   return stages;
 }
 
-export async function listBadPrices(db: Db, q: BadPriceQuery, page: number, pageSize: number) {
-  const [res] = await db
+/**
+ * Every wrong price, in a compact form: [price id, day (YYYY-MM-DD), problem bits, state].
+ *
+ * Finding wrong prices means reading every price row (the checks compare fields, so no
+ * index helps): seconds on a large collection. It is done once into this index, which the
+ * Wrong prices page and the counts then filter in memory.
+ */
+export type BadPriceEntry = [id: string, day: string, mask: number, state: string];
+const BIT = Object.fromEntries(PROBLEM_KEYS.map((k, i) => [k, 1 << i])) as Record<PriceProblem, number>;
+
+export async function buildBadPriceIndex(db: Db): Promise<BadPriceEntry[]> {
+  const rows = await db
     .collection(COLL.prices)
-    .aggregate<{ rows: BadPriceRow[]; total: { n: number }[] }>(
+    .aggregate<BadPriceRow>(
       [
-        ...pipelineFor(q),
-        { $facet: { rows: [{ $sort: { date: -1, _id: 1 } }, { $skip: (page - 1) * pageSize }, { $limit: pageSize }], total: [{ $count: "n" }] } },
+        { $match: problemFilter() },
+        { $project: { date: 1, min_price: 1, max_price: 1, modal_price: 1, market_commodity_id: 1 } },
+        { $lookup: { from: COLL.listings, localField: "market_commodity_id", foreignField: "_id", as: "mc", pipeline: [{ $project: { state_code: 1, state: 1 } }] } },
+        { $unwind: { path: "$mc", preserveNullAndEmptyArrays: true } },
       ],
       { maxTimeMS: 55_000, allowDiskUse: true },
     )
     .toArray();
-  return { rows: res?.rows ?? [], total: res?.total[0]?.n ?? 0 };
+  return rows
+    .map((r): BadPriceEntry => [
+      String(r._id),
+      isoDay(new Date(r.date)),
+      problemsOf(r).reduce((m, p) => m | BIT[p], 0),
+      r.mc?.state_code ?? r.mc?.state ?? "",
+    ])
+    .filter((e) => e[2] !== 0);
+}
+
+/** Built at most every 10 minutes and shared by all pages; deleting or editing a price clears it (tag "prices"). */
+export const cachedBadPriceIndex = unstable_cache(async () => buildBadPriceIndex(await getDb()), ["bad-price-index", "v1", PROBLEM_KEYS.join(",")], {
+  revalidate: 600,
+  tags: ["prices"],
+});
+
+function matches(e: BadPriceEntry, q: BadPriceQuery): boolean {
+  return (!q.problem || (e[2] & BIT[q.problem]) !== 0) && (!q.state || e[3] === q.state) && (!q.date || e[1] === q.date);
+}
+
+/** One page of wrong prices, newest first. Pass the cached index from a page; tests build it fresh. */
+export async function listBadPrices(db: Db, q: BadPriceQuery, page: number, pageSize: number, index?: BadPriceEntry[]) {
+  const all = (index ?? (await buildBadPriceIndex(db))).filter((e) => matches(e, q));
+  all.sort((a, b) => (a[1] === b[1] ? (a[0] < b[0] ? -1 : 1) : a[1] < b[1] ? 1 : -1));
+  const ids = all.slice((page - 1) * pageSize, page * pageSize).map((e) => new ObjectId(e[0]));
+  if (!ids.length) return { rows: [] as BadPriceRow[], total: all.length };
+  const rows = await db
+    .collection(COLL.prices)
+    .aggregate<BadPriceRow>([{ $match: { _id: { $in: ids } } }, LISTING_LOOKUP, { $unwind: { path: "$mc", preserveNullAndEmptyArrays: true } }, { $sort: { date: -1, _id: 1 } }], {
+      maxTimeMS: 20_000,
+    })
+    .toArray();
+  return { rows, total: all.length };
+}
+
+export function countsFromIndex(index: BadPriceEntry[]): Record<PriceProblem, number> {
+  return Object.fromEntries(PROBLEM_KEYS.map((k) => [k, index.filter((e) => (e[2] & BIT[k]) !== 0).length])) as Record<PriceProblem, number>;
 }
 
 /** Count of prices failing each check. */
 export async function badPriceCounts(db: Db): Promise<Record<PriceProblem, number>> {
-  const coll = db.collection(COLL.prices);
-  const counts = await Promise.all(PROBLEM_KEYS.map((k) => coll.countDocuments(PRICE_PROBLEMS[k].filter, { maxTimeMS: 55_000 })));
-  return Object.fromEntries(PROBLEM_KEYS.map((k, i) => [k, counts[i]])) as Record<PriceProblem, number>;
+  return countsFromIndex(await buildBadPriceIndex(db));
 }
 
-/** Cached for the pages; deleting or editing a price clears it (tag "prices"). */
-export const cachedBadPriceCounts = unstable_cache(async () => badPriceCounts(await getDb()), ["bad-price-counts", PROBLEM_KEYS.join(",")], { revalidate: 600, tags: ["prices"] });
+/** Counts for the pages, from the cached index. */
+export async function cachedBadPriceCounts(): Promise<Record<PriceProblem, number>> {
+  return countsFromIndex(await cachedBadPriceIndex());
+}
 
 /** Open "price looks wrong" review items for these prices are closed with the same action. */
 async function closeReviewItems(db: Db, user: SessionUser, rows: BadPriceRow[], action: "deleted" | "edited") {

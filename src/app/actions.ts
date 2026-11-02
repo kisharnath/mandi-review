@@ -39,6 +39,7 @@ async function act(form: FormData, work: () => Promise<string>): Promise<never> 
   try {
     msg = await work();
     revalidatePath("/", "layout");
+    revalidateTag("badges");
   } catch (e) {
     err = e instanceof Error ? e.message : String(e);
   }

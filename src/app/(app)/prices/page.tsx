@@ -6,7 +6,7 @@ import { Badge, Empty, Flash, PageHeader } from "@/components/ui";
 import { canEdit, requireUser } from "@/lib/auth";
 import { COLL, getDb } from "@/lib/db";
 import { first, fmtDate, fmtNumber, titleCase } from "@/lib/format";
-import { cachedBadPriceCounts, isProblem, listBadPrices, MAX_DELETE_ALL, PRICE_PROBLEMS, PROBLEM_KEYS, problemsOf, type PriceProblem } from "@/lib/prices";
+import { cachedBadPriceIndex, countsFromIndex, isProblem, listBadPrices, MAX_DELETE_ALL, PRICE_PROBLEMS, PROBLEM_KEYS, problemsOf, type PriceProblem } from "@/lib/prices";
 
 export const maxDuration = 60;
 const PAGE = 100;
@@ -25,11 +25,12 @@ export default async function WrongPricesPage({ searchParams }: { searchParams: 
   const page = Math.max(1, Number(first(sp.page)) || 1);
 
   const db = await getDb();
-  const [counts, { rows, total }, states] = await Promise.all([
-    cachedBadPriceCounts(),
-    listBadPrices(db, { problem, state, date }, page, PAGE),
+  const [index, states] = await Promise.all([
+    cachedBadPriceIndex(),
     db.collection<{ _id: string; name: string }>(COLL.states).find({}, { projection: { name: 1 } }).sort({ name: 1 }).toArray(),
   ]);
+  const counts = countsFromIndex(index);
+  const { rows, total } = await listBadPrices(db, { problem, state, date }, page, PAGE, index);
   const countOf = (k: PriceProblem) => counts[k] ?? 0;
   const allCount = PROBLEM_KEYS.reduce((n, k) => n + countOf(k), 0);
 
