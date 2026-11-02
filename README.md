@@ -10,14 +10,15 @@ This branch (`v2`) works on the **v2 collections**, built by the scraper's `main
 | **Statistics** | The whole database at a glance: prices per day for 30 days, share of listings with a product and a mandi by state and source, name-link status, wrong prices by problem, mandis with a location |
 | **Scrape runs** | Every run, per source: worked or failed, records fetched and saved, per-state counts, the error |
 | **Review list** | Counts of names waiting for review, plus failed scrapes, odd prices and unknown state spellings |
-| **Wrong prices** | Prices that cannot be right (0 or below, min above max, modal outside min–max, no price at all, no modal). Edit a price, or tick rows and delete them; admins can delete every match of one problem at once (up to 10,000) |
+| **Wrong prices** | Prices that cannot be right (0 or below, min above max, modal outside min–max, no price at all, no modal). Edit a price, or tick rows and delete them; admins can delete every match of one problem at once (up to 10,000). The list is refreshed every 10 minutes, and at once after an edit or delete |
 | **Crop names** | Every crop name each source uses. Approve it as a product, reject it, or create the crop/product it needs. Tabs: Pending, Double-check (approved by the migration, not by a person), Approved, Rejected |
 | **Mandi names** | Every mandi name each source uses in a state. Approve it as an `available_mandi` record, reject it, or add a new mandi |
-| **Farmer words** | Words farmers use for a crop (dhan, धान, jhona) and the product they mean. Pending words (claimed by two crops, or looking wrong) give no answer until approved; add missing words here |
+| **Farmer words** | Other English names for a crop (dry chillies, blackgram, beet root) and the product they mean. Questions are translated into English before they reach the price tool, so local-language words are not kept. Pending words (claimed by two crops, or looking wrong) give no answer until approved; add missing words here |
 | **Crops & products** | Crops, their products and default product, and every name approved for each product |
 | **Mandis** | Every mandi; edit district, postcode and location (the `available_mandi` schema is not changed) |
 | **States** | Every spelling the sources use for each state |
 | **All data** | Every collection, with search, filters, paging and a full view of any record |
+| **How it works** | How prices get from the sources into the database, what each collection holds, and how the farmer price tool finds a price |
 | **Change history** | Who changed what, when, before and after |
 
 ## How a decision takes effect
