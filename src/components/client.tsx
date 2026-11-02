@@ -134,7 +134,17 @@ export function SubmitButton({ children, className = "btn-primary", confirm, nam
       disabled={pending}
       className={className}
       onClick={(e) => {
-        if (confirm && !window.confirm(confirm)) e.preventDefault();
+        if (confirm && !window.confirm(confirm)) return e.preventDefault();
+        // React's form actions drop the clicked button's name/value, so copy it into a
+        // hidden input. Clear the one left by an earlier button first.
+        const form = e.currentTarget.form;
+        if (!form) return;
+        form.querySelectorAll("input[data-submitter]").forEach((el) => el.remove());
+        if (!name) return;
+        const input = document.createElement("input");
+        Object.assign(input, { type: "hidden", name, value: value ?? "" });
+        input.dataset.submitter = "";
+        form.appendChild(input);
       }}
     >
       {pending && <Loader2 className="h-4 w-4 animate-spin" />}

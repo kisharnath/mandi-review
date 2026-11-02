@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Activity, BadgeAlert, BarChart3, Database, Flag, History, LayoutDashboard, ListChecks, LogOut, MapPin, MessageSquareText, Shuffle, Signpost, Sprout } from "lucide-react";
+import { Activity, BadgeAlert, BarChart3, BookOpen, Database, Flag, History, LayoutDashboard, ListChecks, LogOut, MapPin, MessageSquareText, Shuffle, Signpost, Sprout } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -19,6 +19,7 @@ const linksFor = (mandis: string, audit: string) => [
   { href: "/state-names", label: "States", icon: Flag },
   { href: "/data", label: "All data", icon: Database },
   { href: `/data/${audit}`, label: "Change history", icon: History },
+  { href: "/how-it-works", label: "How it works", icon: BookOpen },
 ];
 
 export function Nav({ user, openCount, logout, mandisCollection, auditCollection }: {
