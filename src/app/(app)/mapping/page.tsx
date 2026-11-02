@@ -236,7 +236,7 @@ async function Detail({ row, back, editor, productLabel, suggestionLabel }: {
               <label className="label">It means this product</label>
               <Picker kind="products" name="productId" placeholder="Search products…" initial={initial} />
             </div>
-            <input name="notes" className="input" placeholder="Note (optional), e.g. local name for ragi" defaultValue={row.notes ?? ""} />
+            <input name="notes" className="input" placeholder="Note (optional), e.g. same crop as finger millet" defaultValue={row.notes ?? ""} />
             <div className="flex flex-wrap gap-2">
               <SubmitButton name="status" value="approved">{row.status === "approved" ? "Save" : "Approve"}</SubmitButton>
               {row.status !== "rejected" && (

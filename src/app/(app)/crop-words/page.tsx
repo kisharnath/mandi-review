@@ -63,7 +63,7 @@ export default async function CropWordsPage({ searchParams }: { searchParams: Pr
     <>
       <PageHeader
         title="Farmer words"
-        description="Words farmers use when they ask for a crop (dhan, धान, jhona, moongphali) and the crop they mean. Only approved words are used to answer."
+        description="Other English names for a crop (dry chillies, blackgram, beet root) and the crop they mean. Questions are translated into English before they reach the tool, so local-language words are not kept here. Only approved words are used to answer."
       />
       <Flash msg={first(sp.msg)} err={first(sp.err)} />
       <div className="mb-4 flex flex-wrap items-center gap-3">

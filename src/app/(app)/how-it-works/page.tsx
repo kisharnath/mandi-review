@@ -49,7 +49,7 @@ export default async function HowItWorksPage() {
     { name: COLL.products, job: "What a price is for, e.g. paddy (raw), basmati paddy, rice (milled). The tool always answers for one product.", writer: "This site", href: "/crops" },
     { name: COLL.cropNames, job: "Each crop spelling a source uses (\"Paddy(Common)\") linked to a product. Pending until a person approves it.", writer: "Scraper adds as pending; people approve", href: "/mapping" },
     { name: COLL.mandiNames, job: "Each mandi spelling a source uses, per state, linked to a mandi in available_mandi.", writer: "Scraper adds as pending; people approve", href: "/mandi-links" },
-    { name: COLL.cropWords, job: "Words farmers say (dhan, धान, chawal) linked to a product.", writer: "This site", href: "/crop-words" },
+    { name: COLL.cropWords, job: "Other English names for a crop (dry chillies, blackgram) linked to a product. English only: questions are translated before they reach the tool.", writer: "This site", href: "/crop-words" },
     { name: COLL.states, job: "Each state with all its spellings, so \"Orissa\" and \"Odisha\" are one state.", writer: "This site", href: "/state-names" },
     { name: COLL.mandis, job: "The mandi list with locations. Shared with v1 and never changed by v2 except through this site.", writer: "This site", href: `/data/${COLL.mandis}` },
     { name: COLL.runs, job: "One row per scrape run and source: how many rows came in, what failed.", writer: "Scraper", href: "/runs" },
@@ -195,13 +195,13 @@ export default async function HowItWorksPage() {
         <SectionTitle>How the farmer tool finds a price</SectionTitle>
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="card p-5">
-            <div className="mb-3 text-sm text-zinc-600">Farmer asks: <b>&ldquo;dhan ka bhav Karnal mandi mein?&rdquo;</b> The agent calls the tool with crop <Code>dhan</Code>, state Haryana, mandi Karnal.</div>
+            <div className="mb-3 text-sm text-zinc-600">Farmer asks: <b>&ldquo;dhan ka bhav Karnal mandi mein?&rdquo;</b> The planner translates it into English (&ldquo;paddy price in Karnal mandi&rdquo;), and the agent calls the tool with crop <Code>paddy</Code>, state Haryana, mandi Karnal.</div>
             <ol className="space-y-4">
               <Step n={1} title="Crop word → one product">
                 Checked in this order; the first hit wins:
                 <ol className="mt-1 list-[lower-alpha] space-y-0.5 pl-5">
                   <li>a product or crop name (a crop gives its default product)</li>
-                  <li>an <b>approved</b> farmer word: dhan → paddy. A pending or rejected word stops here with no price.</li>
+                  <li>an <b>approved</b> farmer word: dry chillies → red chilli. A pending or rejected word stops here with no price.</li>
                   <li>an approved source spelling from Crop names</li>
                   <li>a clear typo: one wrong letter (two for long names), and no other crop equally close</li>
                 </ol>
@@ -217,7 +217,7 @@ export default async function HowItWorksPage() {
             <div className="card p-5">
               <SectionTitle>What the farmer gets back</SectionTitle>
               <ul className="space-y-2 text-sm text-zinc-600">
-                <li><b className="text-emerald-800">A price</b> for one product only: asking for dhan never mixes in rice or basmati.</li>
+                <li><b className="text-emerald-800">A price</b> for one product only: asking for paddy never mixes in rice or basmati.</li>
                 <li><b className="text-amber-800">&ldquo;Did you mean…&rdquo;</b> when the word is unknown (<Code>crop_not_recognised</Code>).</li>
                 <li><b className="text-amber-800">No mandi in this state</b> trades it (<Code>no_listings_in_state</Code>).</li>
                 <li><b className="text-amber-800">Not available</b> while the name is still pending review, instead of a guessed price.</li>
