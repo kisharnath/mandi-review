@@ -200,7 +200,10 @@ export function Picker({ kind, name, state, placeholder, initial }: {
     <div ref={box} className="relative w-full">
       <input type="hidden" name={name} value={chosen?.id ?? ""} />
       <button type="button" onClick={() => setOpen((o) => !o)} className="input flex items-center justify-between text-left">
-        <span className={clsx("truncate", !chosen && "text-zinc-400")}>{chosen ? chosen.label : placeholder}</span>
+        <span className="min-w-0">
+          <span className={clsx("block truncate", !chosen && "text-zinc-400")}>{chosen ? chosen.label : placeholder}</span>
+          {chosen?.sub && <span className="block truncate text-xs text-zinc-500">{chosen.sub}</span>}
+        </span>
         <ChevronsUpDown className="h-4 w-4 shrink-0 text-zinc-400" />
       </button>
       {open && (

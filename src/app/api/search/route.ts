@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
     if (spellings.length) filter.state = { $in: spellings };
     const docs = await db
       .collection(COLL.mandis)
-      .find(filter, { projection: { name: 1, state: 1, district: 1, postcode: 1 } })
+      .find(filter, { projection: { name: 1, state: 1, district: 1, postcode: 1, source: 1 } })
       .sort({ name: 1 })
       .limit(40)
       .maxTimeMS(MAX_TIME_MS)
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
       items: docs.map((d) => ({
         id: String(d._id),
         label: titleCase(d.name),
-        sub: [titleCase(d.district), titleCase(d.state), d.postcode].filter(Boolean).join(" · "),
+        sub: [d.district ? `District: ${titleCase(d.district)}` : "No district", titleCase(d.state), d.postcode, d.source ? `Source: ${d.source}` : null].filter(Boolean).join(" · "),
       })),
     });
   }

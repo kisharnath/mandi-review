@@ -14,6 +14,11 @@ import { stateNames } from "@/lib/stats";
 export const maxDuration = 60;
 const LIST_LIMIT = 400;
 
+type MandiLike = Record<string, unknown>;
+const mandiMeta = (m: MandiLike) =>
+  `${m.district ? `District: ${titleCase(String(m.district))}` : "No district"} · Source: ${m.source ? String(m.source) : "unknown"}`;
+const mandiText = (m: MandiLike) => `${titleCase(String(m.name))} (${mandiMeta(m)})`;
+
 export default async function MandiLinksPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
   const user = await requireUser();
@@ -42,7 +47,7 @@ export default async function MandiLinksPage({ searchParams }: { searchParams: P
   ]);
   const mandiIds = [...docs.map((d) => d.mandi_id), ...docs.map((d) => d.suggestion?.mandi_id)].filter(Boolean) as ObjectId[];
   const mandis = new Map(
-    (await db.collection(COLL.mandis).find({ _id: { $in: mandiIds } }, { projection: { name: 1, district: 1 } }).toArray()).map((m) => [String(m._id), m]),
+    (await db.collection(COLL.mandis).find({ _id: { $in: mandiIds } }, { projection: { name: 1, district: 1, source: 1 } }).toArray()).map((m) => [String(m._id), m]),
   );
   const countOf = (s: string) => counts.find((c) => c._id === s)?.n ?? 0;
 
@@ -100,8 +105,8 @@ export default async function MandiLinksPage({ searchParams }: { searchParams: P
                         {d.status === "approved" && d.needs_check ? <Badge tone="blue">Approved by migration</Badge> : (
                           <Badge tone={d.status === "approved" ? "green" : d.status === "rejected" ? "red" : "amber"}>{titleCase(d.status)}</Badge>
                         )}
-                        {linked && <span className="text-zinc-700">→ {titleCase(String(linked.name))}</span>}
-                        {!linked && guess && <span className="text-zinc-500">guess: {titleCase(String(guess.name))}</span>}
+                        {linked && <span className="text-zinc-700">→ {mandiText(linked)}</span>}
+                        {!linked && guess && <span className="text-zinc-500">guess: {mandiText(guess)}</span>}
                       </div>
                     </Link>
                   </li>
@@ -135,7 +140,11 @@ async function Detail({ row, back, editor, stateLabel }: { row: MandiNameDoc; ba
   const latest = listings.length
     ? await db.collection(COLL.prices).find({ market_commodity_id: { $in: listings.map((l) => l._id) } }, { projection: { date: 1 } }).sort({ date: -1 }).limit(1).next()
     : null;
-  const initial = linked ? { id: String(linked._id), label: titleCase(String(linked.name)) } : guess ? { id: String(guess._id), label: titleCase(String(guess.name)) } : null;
+  const initial = linked
+    ? { id: String(linked._id), label: titleCase(String(linked.name)), sub: mandiMeta(linked) }
+    : guess
+      ? { id: String(guess._id), label: titleCase(String(guess.name)), sub: mandiMeta(guess) }
+      : null;
   const newMandi = new URLSearchParams({ name: row.raw_name, state: stateLabel.toLowerCase(), linkId: String(row._id) });
 
   return (
@@ -149,13 +158,13 @@ async function Detail({ row, back, editor, stateLabel }: { row: MandiNameDoc; ba
         </div>
         <div className="mt-4 rounded-lg bg-zinc-50 p-3 text-sm">
           {linked ? (
-            <span>Linked to <Link className="font-semibold text-emerald-800 hover:underline" href={`/mandis/${String(linked._id)}`}>{titleCase(String(linked.name))}</Link> ({titleCase(String(linked.district ?? ""))})</span>
+            <span>Linked to <Link className="font-semibold text-emerald-800 hover:underline" href={`/mandis/${String(linked._id)}`}>{titleCase(String(linked.name))}</Link> <span className="text-zinc-600"> · {mandiMeta(linked)}</span></span>
           ) : (
             <span className="text-amber-800">Not linked to a mandi.</span>
           )}
           {row.decided_by && <div className="mt-1 text-xs text-zinc-500">Decided by {row.decided_by} · {fmtDateTime(row.decided_at)}{row.needs_check && " · nobody has checked this yet"}</div>}
           {row.suggestion?.reason && (
-            <div className="mt-2 text-xs text-zinc-600">Old system: {guess ? <b>{titleCase(String(guess.name))}</b> : "no mandi"} — {row.suggestion.reason}</div>
+            <div className="mt-2 text-xs text-zinc-600">Old system: {guess ? <><b>{titleCase(String(guess.name))}</b> ({mandiMeta(guess)})</> : "no mandi"} — {row.suggestion.reason}</div>
           )}
         </div>
         <div className="mt-3 text-xs text-zinc-500">Crops listed: {[...new Set(listings.map((l) => l.commodity_name))].slice(0, 20).join(", ")}</div>
