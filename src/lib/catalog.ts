@@ -44,6 +44,7 @@ export type MandiNameDoc = {
   source: string;
   state_code: string | null;
   raw_name: string;
+  district?: string | null;
   mandi_id: ObjectId | null;
   status: Status;
   suggestion?: { mandi_id?: ObjectId | null; mandi_name?: string | null; reason?: string | null } | null;

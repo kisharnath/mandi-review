@@ -18,6 +18,7 @@ const LIST_LIMIT = 400;
 type MandiLike = Record<string, unknown>;
 const mandiMeta = (m: MandiLike) =>
   `${m.district ? `District: ${titleCase(String(m.district))}` : "No district"} · Source: ${m.source ? String(m.source) : "unknown"}`;
+const sameDistrict = (a: unknown, b: unknown) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
 const mandiText = (m: MandiLike) => `${titleCase(String(m.name))} (${mandiMeta(m)})`;
 
 export default async function MandiLinksPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -120,7 +121,8 @@ export default async function MandiLinksPage({ searchParams }: { searchParams: P
                         <span className="shrink-0 text-xs text-zinc-500 tabular-nums">{fmtNumber(d.listings ?? 0)}</span>
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-                        <span className="text-zinc-400">{titleCase(names[d.state_code ?? ""] ?? d.state_code ?? "no state")} · {d.source}</span>
+                        <span className="text-zinc-400">{titleCase(names[d.state_code ?? ""] ?? d.state_code ?? "no state")}{d.district ? ` · ${titleCase(d.district)}` : ""} · {d.source}</span>
+                        {d.district && guess?.district && (sameDistrict(d.district, guess.district) ? <span className="text-emerald-700" title="Same district as the guess">✓</span> : <span className="text-amber-700" title={`Guess is in ${titleCase(String(guess.district))}`}>⚠ district differs</span>)}
                         {d.status === "approved" && d.needs_check ? <Badge tone="blue">Approved by migration</Badge> : (
                           <Badge tone={d.status === "approved" ? "green" : d.status === "rejected" ? "red" : "amber"}>{titleCase(d.status)}</Badge>
                         )}
@@ -174,6 +176,7 @@ async function Detail({ row, back, editor, stateLabel }: { row: MandiNameDoc; ba
         <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm text-zinc-600">
           <span><b className="text-zinc-900 tabular-nums">{fmtNumber(listings.length)}</b> crop listings</span>
           <span>Last price {latest ? fmtDate(latest.date) : "—"}</span>
+          <span>District from source: <b className="text-zinc-900">{row.district ? titleCase(row.district) : "not reported"}</b></span>
         </div>
         <div className="mt-4 rounded-lg bg-zinc-50 p-3 text-sm">
           {linked ? (
