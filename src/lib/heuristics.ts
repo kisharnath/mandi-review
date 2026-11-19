@@ -1,3 +1,5 @@
+import { normName } from "./format";
+
 /**
  * Flags for crop names that are probably in the wrong crop group.
  * These are hints for a reviewer, never automatic changes.
@@ -68,4 +70,15 @@ export function looksWrong(name: string, canonical: string | null | undefined, g
 
 export function isOtherScript(name: string): boolean {
   return /[^\u0000-ɏ\s\p{P}\p{N}]/u.test(name);
+}
+
+const NOISE = new Set(["mandi", "apmc", "market", "markets", "krishi", "upaj", "utpanna", "bazar", "bazaar", "yard", "aprm", "amc"]);
+
+/** Name with brackets, punctuation and filler words ("APMC", "mandi") removed, so spelling noise matches. */
+export function mandiKey(name: string | null | undefined): string {
+  return normName(name)
+    .replace(/\([^)]*\)/g, " ")
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w && !NOISE.has(w))
+    .join("");
 }

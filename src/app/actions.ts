@@ -13,6 +13,7 @@ import {
   type Status,
 } from "@/lib/catalog";
 import { createMandi, updateMandi } from "@/lib/mandis";
+import { approveConfidentMandiGuesses } from "@/lib/mandi-match";
 import { deletePrices, editPrice, isProblem } from "@/lib/prices";
 import { SESSION_COOKIE, SESSION_MAX_AGE, signSession } from "@/lib/session";
 
@@ -191,6 +192,14 @@ export async function decideMandiNameAction(form: FormData) {
       status: s, mandiId: s === "approved" ? needId(form, "mandiId", "mandi") : null, notes: str(form, "notes"),
     });
     return s === "approved" ? `Approved as ${res.mandiName}. ${res.listings} listings updated.` : s === "rejected" ? "Rejected." : "Moved back to pending.";
+  });
+}
+
+export async function bulkApproveMandiGuessesAction(form: FormData) {
+  return act(form, async () => {
+    const user = await requireEditor();
+    const r = await approveConfidentMandiGuesses(await getDb(), user, str(form, "state") || undefined);
+    return `Approved ${r.approved} mandi names (${r.listings} listings updated). They are in Double-check.`;
   });
 }
 

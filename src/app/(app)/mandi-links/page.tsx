@@ -1,13 +1,14 @@
 import clsx from "clsx";
 import Link from "next/link";
 import type { Filter, ObjectId } from "mongodb";
-import { decideMandiNameAction } from "@/app/actions";
+import { bulkApproveMandiGuessesAction, decideMandiNameAction } from "@/app/actions";
 import { FilterSelect, Picker, SearchBox, SubmitButton, Tabs } from "@/components/client";
 import { Badge, Empty, Flash, PageHeader, SectionTitle } from "@/components/ui";
 import { canEdit, requireUser } from "@/lib/auth";
 import type { MandiNameDoc } from "@/lib/catalog";
 import { COLL, getDb, MAX_TIME_MS } from "@/lib/db";
 import { escapeRegex, first, fmtDate, fmtDateTime, fmtNumber, titleCase, toObjectId } from "@/lib/format";
+import { confidentMandiGuesses } from "@/lib/mandi-match";
 import { MANDI_EDITS_ENABLED } from "@/lib/mandis";
 import { stateNames } from "@/lib/stats";
 
@@ -49,6 +50,7 @@ export default async function MandiLinksPage({ searchParams }: { searchParams: P
   const mandis = new Map(
     (await db.collection(COLL.mandis).find({ _id: { $in: mandiIds } }, { projection: { name: 1, district: 1, source: 1 } }).toArray()).map((m) => [String(m._id), m]),
   );
+  const confident = editor && status === "pending" ? await confidentMandiGuesses(db, { state: state || undefined, limit: 8 }) : null;
   const countOf = (s: string) => counts.find((c) => c._id === s)?.n ?? 0;
 
   const qs = new URLSearchParams();
@@ -83,6 +85,23 @@ export default async function MandiLinksPage({ searchParams }: { searchParams: P
         <FilterSelect param="source" label="Source" options={sources.sort().map((s) => ({ value: s, label: s }))} />
         <SearchBox placeholder="Search mandi name…" />
       </div>
+
+      {confident && confident.total > 0 && (
+        <div className="card mb-4 p-4 text-sm">
+          <div className="font-medium text-zinc-900">{fmtNumber(confident.total)} pending names match exactly one mandi in their state</div>
+          <ul className="mt-2 space-y-0.5 text-xs text-zinc-600">
+            {confident.items.map((c) => (
+              <li key={String(c.row._id)}>{c.row.raw_name} ({c.row.source}) → {titleCase(c.mandiName)}{c.district ? `, ${titleCase(c.district)}` : ""}</li>
+            ))}
+            {confident.total > confident.items.length && <li>…and {fmtNumber(confident.total - confident.items.length)} more</li>}
+          </ul>
+          <form action={bulkApproveMandiGuessesAction} className="mt-3">
+            <input type="hidden" name="back" value={back} />
+            <input type="hidden" name="state" value={state} />
+            <SubmitButton confirm={`Approve ${confident.total} mandi names? They stay in Double-check.`}>Approve all {fmtNumber(confident.total)}</SubmitButton>
+          </form>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <div className="card h-[calc(100vh-15rem)] overflow-y-auto">
