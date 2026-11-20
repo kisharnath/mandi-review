@@ -3,6 +3,7 @@ import { currentUser } from "@/lib/auth";
 import { stateSpellings } from "@/lib/catalog";
 import { COLL, getDb, MAX_TIME_MS } from "@/lib/db";
 import { escapeRegex, titleCase } from "@/lib/format";
+import { likelyMandis, likelyProducts } from "@/lib/likely";
 
 /** Search products (with their crop) or mandis for the picker dropdowns. */
 export async function GET(req: NextRequest) {
@@ -10,8 +11,39 @@ export async function GET(req: NextRequest) {
   const kind = req.nextUrl.searchParams.get("kind");
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
   const state = (req.nextUrl.searchParams.get("state") ?? "").trim();
+  const like = (req.nextUrl.searchParams.get("like") ?? "").trim();
+  const district = (req.nextUrl.searchParams.get("district") ?? "").trim();
   const db = await getDb();
   const rx = q ? { $regex: escapeRegex(q), $options: "i" } : undefined;
+
+  if (kind === "products" && like) {
+    const [products, crops] = await Promise.all([
+      db.collection(COLL.products).find({ active: { $ne: false } }, { projection: { name: 1, crop_id: 1, form: 1 } }).maxTimeMS(MAX_TIME_MS).toArray(),
+      db.collection(COLL.crops).find({}, { projection: { name: 1 } }).maxTimeMS(MAX_TIME_MS).toArray(),
+    ]);
+    const cropName = new Map(crops.map((c) => [String(c._id), String(c.name)]));
+    const ranked = likelyProducts(like, products.map((p) => ({ _id: p._id, name: String(p.name), cropName: cropName.get(String(p.crop_id)), form: p.form })));
+    return NextResponse.json({
+      items: ranked.map((p) => ({ id: String(p._id), label: titleCase(p.name), sub: `Crop: ${titleCase(p.cropName ?? "?")}${p.form === "processed" ? " · processed" : ""}` })),
+    });
+  }
+
+  if (kind === "mandis" && like) {
+    const spellings = state ? await stateSpellings(db, state) : [];
+    const docs = await db
+      .collection(COLL.mandis)
+      .find(spellings.length ? { state: { $in: spellings } } : {}, { projection: { name: 1, state: 1, district: 1, source: 1, aliases: 1 } })
+      .maxTimeMS(MAX_TIME_MS)
+      .toArray();
+    const ranked = likelyMandis(like, docs.map((d) => ({ _id: d._id, name: String(d.name), district: d.district ? String(d.district) : null, aliases: d.aliases, state: d.state, source: d.source })), district);
+    return NextResponse.json({
+      items: ranked.map((d) => ({
+        id: String(d._id),
+        label: titleCase(d.name),
+        sub: [d.district ? `District: ${titleCase(d.district)}` : "No district", d.source ? `Source: ${d.source}` : null].filter(Boolean).join(" · "),
+      })),
+    });
+  }
 
   if (kind === "products") {
     const crops = rx

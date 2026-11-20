@@ -139,9 +139,11 @@ export default async function CropWordsPage({ searchParams }: { searchParams: Pr
                   <div>
                     <label className="label">Farmers saying this mean</label>
                     <Picker
+                      key={String(selected._id)}
                       kind="products"
                       name="productId"
                       placeholder="Search products…"
+                      seed={selected.word}
                       initial={meaning(selected) ? { id: meaning(selected)!.productId, label: titleCase(meaning(selected)!.label) } : null}
                     />
                   </div>

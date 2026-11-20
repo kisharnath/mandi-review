@@ -200,7 +200,7 @@ async function Detail({ row, back, editor, stateLabel }: { row: MandiNameDoc; ba
             <input type="hidden" name="id" value={String(row._id)} />
             <div>
               <label className="label">It is this mandi</label>
-              <Picker kind="mandis" name="mandiId" state={row.state_code ?? undefined} placeholder="Search mandis in this state…" initial={initial} />
+              <Picker key={String(row._id)} kind="mandis" name="mandiId" state={row.state_code ?? undefined} placeholder="Search mandis in this state…" initial={initial} seed={row.raw_name} district={row.district} />
             </div>
             <input name="notes" className="input" placeholder="Note (optional)" defaultValue={row.notes ?? ""} />
             <div className="flex flex-wrap gap-2">

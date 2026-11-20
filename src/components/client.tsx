@@ -156,19 +156,35 @@ export function SubmitButton({ children, className = "btn-primary", confirm, nam
 type PickItem = { id: string; label: string; sub?: string };
 
 /** Searchable dropdown backed by /api/search. Puts the chosen id in a hidden input. */
-export function Picker({ kind, name, state, placeholder, initial }: {
+export function Picker({ kind, name, state, placeholder, initial, seed, district }: {
   kind: "products" | "crops" | "mandis";
   name: string;
   state?: string;
   placeholder: string;
   initial?: PickItem | null;
+  /** The raw name being mapped. Likely matches are searched for automatically. */
+  seed?: string;
+  district?: string | null;
 }) {
   const [open, setOpen] = useState(false);
+  const [likely, setLikely] = useState<PickItem[] | null>(null);
   const [q, setQ] = useState("");
   const [items, setItems] = useState<PickItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [chosen, setChosen] = useState<PickItem | null>(initial ?? null);
   const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setLikely(null);
+    if (!seed || (kind !== "mandis" && kind !== "products")) return;
+    const ctrl = new AbortController();
+    const url = `/api/search?kind=${kind}&like=${encodeURIComponent(seed)}${state ? `&state=${encodeURIComponent(state)}` : ""}${district ? `&district=${encodeURIComponent(district)}` : ""}`;
+    fetch(url, { signal: ctrl.signal })
+      .then((r) => r.json())
+      .then((d) => setLikely(d.items ?? []))
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [seed, kind, state, district]);
 
   useEffect(() => {
     if (!open) return;
@@ -234,6 +250,25 @@ export function Picker({ kind, name, state, placeholder, initial }: {
                 </li>
               ))}
           </ul>
+        </div>
+      )}
+      {seed && likely && (
+        <div className="mt-2 text-xs">
+          <div className="mb-1 text-zinc-500">{likely.length ? `Likely matches for “${seed}” — click one:` : `No likely match found for “${seed}”. Search by hand above.`}</div>
+          <div className="flex flex-wrap gap-1.5">
+            {likely.map((it) => (
+              <button
+                key={it.id}
+                type="button"
+                title={it.sub}
+                onClick={() => setChosen(it)}
+                className={clsx("rounded-md border px-2 py-1 text-left hover:bg-emerald-50", chosen?.id === it.id ? "border-emerald-600 bg-emerald-50" : "border-zinc-200")}
+              >
+                <span className="block font-medium text-zinc-900">{it.label}</span>
+                {it.sub && <span className="block text-zinc-500">{it.sub}</span>}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

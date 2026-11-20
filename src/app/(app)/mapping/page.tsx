@@ -234,7 +234,7 @@ async function Detail({ row, back, editor, productLabel, suggestionLabel }: {
             <input type="hidden" name="id" value={String(row._id)} />
             <div>
               <label className="label">It means this product</label>
-              <Picker kind="products" name="productId" placeholder="Search products…" initial={initial} />
+              <Picker key={String(row._id)} kind="products" name="productId" placeholder="Search products…" initial={initial} seed={row.raw_name} />
             </div>
             <input name="notes" className="input" placeholder="Note (optional), e.g. same crop as finger millet" defaultValue={row.notes ?? ""} />
             <div className="flex flex-wrap gap-2">
