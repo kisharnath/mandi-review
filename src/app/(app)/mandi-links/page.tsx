@@ -17,7 +17,7 @@ const LIST_LIMIT = 400;
 
 type MandiLike = Record<string, unknown>;
 const mandiMeta = (m: MandiLike) =>
-  `${m.district ? `District: ${titleCase(String(m.district))}` : "No district"} · Source: ${m.source ? String(m.source) : "unknown"}`;
+  `${m.district ? `District: ${titleCase(String(m.district))}` : "No district"} · ${m.state ? `State: ${titleCase(String(m.state))}` : "No state"} · Source: ${m.source ? String(m.source) : "unknown"}`;
 const sameDistrict = (a: unknown, b: unknown) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
 const mandiText = (m: MandiLike) => `${titleCase(String(m.name))} (${mandiMeta(m)})`;
 
@@ -49,7 +49,7 @@ export default async function MandiLinksPage({ searchParams }: { searchParams: P
   ]);
   const mandiIds = [...docs.map((d) => d.mandi_id), ...docs.map((d) => d.suggestion?.mandi_id)].filter(Boolean) as ObjectId[];
   const mandis = new Map(
-    (await db.collection(COLL.mandis).find({ _id: { $in: mandiIds } }, { projection: { name: 1, district: 1, source: 1 } }).toArray()).map((m) => [String(m._id), m]),
+    (await db.collection(COLL.mandis).find({ _id: { $in: mandiIds } }, { projection: { name: 1, district: 1, state: 1, source: 1 } }).toArray()).map((m) => [String(m._id), m]),
   );
   const confident = editor && status === "pending" ? await confidentMandiGuesses(db, { state: state || undefined, limit: 8 }) : null;
   const countOf = (s: string) => counts.find((c) => c._id === s)?.n ?? 0;

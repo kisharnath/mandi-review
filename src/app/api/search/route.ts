@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       items: ranked.map((d) => ({
         id: String(d._id),
         label: titleCase(d.name),
-        sub: [d.district ? `District: ${titleCase(d.district)}` : "No district", d.source ? `Source: ${d.source}` : null].filter(Boolean).join(" · "),
+        sub: [d.district ? `District: ${titleCase(d.district)}` : "No district", d.state ? `State: ${titleCase(String(d.state))}` : "No state", d.source ? `Source: ${d.source}` : null].filter(Boolean).join(" · "),
       })),
     });
   }
