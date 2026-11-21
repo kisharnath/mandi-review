@@ -92,7 +92,7 @@ function GroupCard({ g, back, editor, stateLabel }: { g: DupGroup; back: string;
   const main = g.members[0];
   const mandis: GraphMandi[] = g.members.map((m, i) => ({
     id: String(m._id), name: titleCase(m.name), district: m.district ? titleCase(m.district) : null, postcode: m.postcode,
-    hasLocation: !!m.location, source: m.source, listings: m.listings, keep: i === 0,
+    hasLocation: !!m.location, source: m.source, keep: i === 0,
   }));
   const names: GraphName[] = [
     ...g.members.flatMap((m) => m.links.map((l) => ({ id: String(l._id), raw: l.raw_name, source: l.source, status: l.status, listings: l.listings ?? 0, mandiId: String(m._id) }))),
@@ -108,7 +108,7 @@ function GroupCard({ g, back, editor, stateLabel }: { g: DupGroup; back: string;
       </div>
       <div className="p-4">
         <div className="mb-2 grid grid-cols-[minmax(0,1fr)_72px_minmax(0,1fr)] text-[11px] font-medium tracking-wide text-zinc-400 uppercase sm:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)]">
-          <span>Mandi names (from sources)</span>
+          <span>Mandi names (listings under each)</span>
           <span />
           <span>Mandis (the copies)</span>
         </div>
