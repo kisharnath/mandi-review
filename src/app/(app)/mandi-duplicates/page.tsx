@@ -1,6 +1,5 @@
-import clsx from "clsx";
-import Link from "next/link";
-import { autoMergeDuplicateMandisAction, mergeDuplicateMandisAction } from "@/app/actions";
+import { autoMergeDuplicateMandisAction } from "@/app/actions";
+import { DupGraph, type GraphMandi, type GraphName } from "@/components/dup-graph";
 import { FilterSelect, SearchBox, SubmitButton, Tabs } from "@/components/client";
 import { Badge, Empty, Flash, PageHeader } from "@/components/ui";
 import { canEdit, requireUser } from "@/lib/auth";
@@ -11,8 +10,6 @@ import { stateNames } from "@/lib/stats";
 
 export const maxDuration = 60;
 const PAGE_SIZE = 40;
-
-const STATUS_PILL: Record<string, "green" | "red" | "amber"> = { approved: "green", rejected: "red", pending: "amber" };
 
 export default async function MandiDuplicatesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
@@ -93,6 +90,14 @@ export default async function MandiDuplicatesPage({ searchParams }: { searchPara
 
 function GroupCard({ g, back, editor, stateLabel }: { g: DupGroup; back: string; editor: boolean; stateLabel: string }) {
   const main = g.members[0];
+  const mandis: GraphMandi[] = g.members.map((m, i) => ({
+    id: String(m._id), name: titleCase(m.name), district: m.district ? titleCase(m.district) : null, postcode: m.postcode,
+    hasLocation: !!m.location, source: m.source, listings: m.listings, keep: i === 0,
+  }));
+  const names: GraphName[] = [
+    ...g.members.flatMap((m) => m.links.map((l) => ({ id: String(l._id), raw: l.raw_name, source: l.source, status: l.status, listings: l.listings ?? 0, mandiId: String(m._id) }))),
+    ...g.waiting.map((w) => ({ id: String(w._id), raw: w.raw_name, source: w.source, status: "pending", listings: w.listings ?? 0, mandiId: null })),
+  ];
   return (
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b border-zinc-100 px-4 py-3">
@@ -100,55 +105,15 @@ function GroupCard({ g, back, editor, stateLabel }: { g: DupGroup; back: string;
         <span className="text-xs text-zinc-500">{stateLabel} · {g.members.length} copies · {fmtNumber(sumListings(g))} listings</span>
         {g.linkedCopies > 1 && <Badge tone="amber" title="Names are linked to more than one copy">Prices split across {g.linkedCopies} copies</Badge>}
         {!g.safe && <Badge tone="red" title="The copies name different districts">Different districts</Badge>}
-        {g.waiting.length > 0 && (
-          <Badge tone="blue" title={g.waiting.map((w) => `${w.raw_name} (${w.source})`).join(", ")}>{g.waiting.length} pending name{g.waiting.length === 1 ? "" : "s"} match</Badge>
-        )}
       </div>
-      <ul className="divide-y divide-zinc-100">
-        {g.members.map((m, i) => (
-          <li key={String(m._id)} className={clsx("px-4 py-3", i === 0 && "bg-emerald-50/40")}>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <Link href={`/mandis/${String(m._id)}`} className="font-medium text-emerald-800 hover:underline">{titleCase(m.name)}</Link>
-                  {i === 0 && <Badge tone="green">Keep (most complete)</Badge>}
-                </div>
-                <div className="mt-0.5 text-xs text-zinc-500">
-                  {m.district ? `District: ${titleCase(m.district)}` : "No district"} · {m.postcode ? `Postcode ${m.postcode}` : "No postcode"} · {m.location ? "Has location" : "No location"} · Source: {m.source ?? "unknown"}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
-                  {m.links.length === 0 ? (
-                    <span className="text-zinc-400">No mandi names linked: not used by any price.</span>
-                  ) : (
-                    m.links.map((l) => (
-                      <Link
-                        key={String(l._id)}
-                        href={`/mandi-links?status=all&q=${encodeURIComponent(l.raw_name)}&id=${String(l._id)}`}
-                        className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-700 hover:bg-emerald-50 hover:text-emerald-800"
-                      >
-                        {l.raw_name} · {l.source} · <span className="tabular-nums">{fmtNumber(l.listings ?? 0)}</span>
-                        <span className={clsx("h-1.5 w-1.5 rounded-full", STATUS_PILL[l.status] === "green" ? "bg-emerald-500" : STATUS_PILL[l.status] === "red" ? "bg-red-500" : "bg-amber-500")} title={titleCase(l.status)} />
-                      </Link>
-                    ))
-                  )}
-                </div>
-              </div>
-              {editor && g.members.length > 1 && (
-                <form action={mergeDuplicateMandisAction} className="shrink-0">
-                  <input type="hidden" name="back" value={back} />
-                  <input type="hidden" name="intoId" value={String(m._id)} />
-                  <SubmitButton
-                    className={i === 0 ? "btn-primary" : "btn-secondary"}
-                    confirm={`Move every name linked to the other ${g.members.length - 1} cop${g.members.length === 2 ? "y" : "ies"} onto this one (${titleCase(m.name)}${m.district ? `, ${titleCase(m.district)}` : ""})?`}
-                  >
-                    {i === 0 ? "Merge others into this" : "Keep this one instead"}
-                  </SubmitButton>
-                </form>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
+      <div className="p-4">
+        <div className="mb-2 grid grid-cols-[minmax(0,1fr)_72px_minmax(0,1fr)] text-[11px] font-medium tracking-wide text-zinc-400 uppercase sm:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)]">
+          <span>Mandi names (from sources)</span>
+          <span />
+          <span>Mandis (the copies)</span>
+        </div>
+        <DupGraph mandis={mandis} names={names} editor={editor} back={back} />
+      </div>
     </div>
   );
 }

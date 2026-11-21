@@ -213,6 +213,17 @@ export async function mergeDuplicateMandisAction(form: FormData) {
   });
 }
 
+/** Point one mandi name at a different mandi (used by the link graph). */
+export async function relinkMandiNameAction(form: FormData) {
+  return act(form, async () => {
+    const user = await requireEditor();
+    const res = await decideMandiName(await getDb(), user, needId(form, "id", "mandi name"), {
+      status: "approved", mandiId: needId(form, "mandiId", "mandi"), notes: "Re-linked from the duplicate mandis graph",
+    });
+    return `Now linked to ${res.mandiName}. ${res.listings} listings updated.`;
+  });
+}
+
 export async function autoMergeDuplicateMandisAction(form: FormData) {
   return act(form, async () => {
     const user = await requireEditor();
