@@ -16,7 +16,7 @@ const COLORS = ["#047857", "#0369a1", "#7c3aed", "#c2410c", "#be123c", "#0f766e"
 
 const NH = 52; // name node height
 const NG = 8; // gap between name nodes
-const MH = 116; // mandi node height
+const MH = 150; // mandi node height
 const MG = 12;
 
 type Pending = { kind: "name"; name: GraphName; to: GraphMandi } | { kind: "copy"; from: GraphMandi; to: GraphMandi };
@@ -51,6 +51,9 @@ export function DupGraph({ mandis, names, editor, back }: { mandis: GraphMandi[]
   const height = Math.max(names.length * (NH + NG) - NG, mandis.length * (MH + MG) - MG);
   const selected = names.find((n) => n.id === selName) ?? null;
   const from = mandis.find((m) => m.id === mergeFrom) ?? null;
+  const main = mandis.find((m) => m.keep) ?? mandis[0];
+  /** Two copies look like one place unless both name a district and the districts differ. */
+  const sameDistrict = (a: GraphMandi, b: GraphMandi) => !a.district || !b.district || a.district.trim().toLowerCase() === b.district.trim().toLowerCase();
   const focus = pending ? null : selName ?? mergeFrom ?? hover;
   const lit = (n: GraphName) => !focus || focus === n.id || focus === n.mandiId;
 
@@ -82,7 +85,7 @@ export function DupGraph({ mandis, names, editor, back }: { mandis: GraphMandi[]
             </div>
           ) : (
             <div className="rounded-lg bg-zinc-50 px-3 py-2 text-zinc-600">
-              <b>Move one name:</b> click it on the left, then the mandi it belongs to. <b>Merge two copies:</b> press “Merge into another…” on the copy to get rid of, then click the copy to keep. You see a preview before anything is saved.
+              <b>Move one name:</b> click it on the left, then the mandi it belongs to. <b>Merge a copy:</b> press “Merge into A (main)” on the smaller copy. The main copy is the one with the most listings. You see a preview before anything is saved.
             </div>
           )}
         </div>
@@ -173,7 +176,7 @@ export function DupGraph({ mandis, names, editor, back }: { mandis: GraphMandi[]
                 <div className="flex min-w-0 items-center gap-1.5">
                   <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[10px] font-bold text-white" style={{ background: color }}>{letter(m)}</span>
                   <Link href={`/mandis/${m.id}`} onClick={(e) => (targetable ? e.preventDefault() : e.stopPropagation())} className="truncate text-sm font-semibold text-zinc-900 hover:underline">{m.name}</Link>
-                  {m.keep && <span className="rounded bg-emerald-100 px-1 text-[11px] font-medium text-emerald-800">keep</span>}
+                  {m.keep && <span className="rounded bg-emerald-100 px-1 text-[11px] font-medium text-emerald-800">main</span>}
                   {targetable && <span className="ml-auto shrink-0 rounded bg-sky-600 px-1.5 text-[11px] font-medium text-white">{from ? "Keep names here" : "Link here"}</span>}
                   {isSource && <span className="ml-auto shrink-0 rounded bg-amber-500 px-1.5 text-[11px] font-medium text-white">Merging away</span>}
                   {isTarget && <span className="ml-auto shrink-0 rounded bg-emerald-600 px-1.5 text-[11px] font-medium text-white">Receives</span>}
@@ -189,15 +192,26 @@ export function DupGraph({ mandis, names, editor, back }: { mandis: GraphMandi[]
                   {pending?.kind === "copy" && pending.from.id === m.id && <span className="text-amber-700"> → 0 after</span>}
                 </div>
                 {editor && mandis.length > 1 && !pending && !from && !selected && (
-                  <button
-                    type="button"
-                    disabled={ns.length === 0}
-                    title={ns.length ? "Pick this copy to merge away, then click the copy that keeps its names" : "No names are linked to this copy, so there is nothing to move"}
-                    className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:underline disabled:cursor-not-allowed disabled:text-zinc-300 disabled:no-underline"
-                    onClick={(e) => { e.stopPropagation(); setSelName(null); setMergeFrom(m.id); }}
-                  >
-                    Merge into another… <ArrowRight className="h-3 w-3" />
-                  </button>
+                  m.keep ? (
+                    <div className="mt-1.5 text-xs text-emerald-700">Main copy: the others merge into this one.</div>
+                  ) : ns.length === 0 ? (
+                    <div className="mt-1.5 text-xs text-zinc-400">No names linked: nothing to merge.</div>
+                  ) : (
+                    <div className="mt-1.5 space-y-1" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className={clsx("inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-white", sameDistrict(m, main) ? "bg-emerald-700 hover:bg-emerald-800" : "bg-amber-600 hover:bg-amber-700")}
+                        title={`Move this copy's ${ns.length} name(s) onto ${main.name}${main.district ? `, ${main.district}` : ""}`}
+                        onClick={() => { setSelName(null); setMergeFrom(null); setPending({ kind: "copy", from: m, to: main }); }}
+                      >
+                        Merge into {letter(main)} (main) <ArrowRight className="h-3 w-3" />
+                      </button>
+                      <div className={clsx("text-[11px]", sameDistrict(m, main) ? "text-zinc-500" : "font-medium text-amber-700")}>
+                        {sameDistrict(m, main) ? `Looks like the same place as ${letter(main)}.` : `Different district from ${letter(main)}: may be a different place.`}{" "}
+                        <button type="button" className="underline" onClick={() => { setSelName(null); setMergeFrom(m.id); }}>merge into another…</button>
+                      </div>
+                    </div>
+                  )
                 )}
               </div>
             );

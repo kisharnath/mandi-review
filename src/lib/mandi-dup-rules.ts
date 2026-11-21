@@ -27,12 +27,12 @@ export function districtsCompatible(members: DupCandidate[]): boolean {
   return new Set(members.map((m) => clean(m.district)).filter(Boolean)).size <= 1;
 }
 
-/** Best one to keep first: most complete record, then the one most names already point at. */
+/** Best one to keep first: the one most listings already use (fewest moves), then the most complete record. */
 export function rankMandis<T extends DupCandidate>(members: T[]): T[] {
   return [...members].sort(
     (a, b) =>
-      completeness(b) - completeness(a) ||
       (b.listings ?? 0) - (a.listings ?? 0) ||
+      completeness(b) - completeness(a) ||
       a._id.toString().localeCompare(b._id.toString()),
   );
 }

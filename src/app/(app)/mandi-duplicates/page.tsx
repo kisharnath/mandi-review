@@ -55,7 +55,7 @@ export default async function MandiDuplicatesPage({ searchParams }: { searchPara
       </div>
 
       <p className="mb-4 text-xs text-zinc-500">
-        {tab === "merge" && "Copies in the same district (or with no district) that each have names linked. Safe to merge: the most complete copy is kept."}
+        {tab === "merge" && "Copies in the same district (or with no district) that each have names linked. Safe to merge: the copy with the most listings is kept."}
         {tab === "differ" && "Same name but different districts: these may be different places. Check each before merging, or leave them."}
         {tab === "unused" && "Only one copy has names linked, so prices are not split. The extra copies are harmless; they come from the shared mandi list and are not deleted here."}
       </p>
@@ -65,7 +65,7 @@ export default async function MandiDuplicatesPage({ searchParams }: { searchPara
           <div className="font-medium text-zinc-900">
             {fmtNumber(needsMerge.length)} duplicate mandis can be merged automatically ({fmtNumber(autoNames)} mandi names move)
           </div>
-          <p className="mt-1 text-xs text-zinc-600">Each group keeps its most complete copy. Moved names go to Double-check. The shared mandi list is not changed.</p>
+          <p className="mt-1 text-xs text-zinc-600">Each group keeps the copy with the most listings. Moved names go to Double-check. The shared mandi list is not changed.</p>
           <form action={autoMergeDuplicateMandisAction} className="mt-3">
             <input type="hidden" name="back" value={back} />
             <input type="hidden" name="state" value={state} />
