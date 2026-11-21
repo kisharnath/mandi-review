@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import { Check, ChevronsUpDown, Loader2, Search, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useRef, useState, useTransition, type CSSProperties, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
 /** Set or clear URL search params and reset to page 1. */
@@ -118,9 +118,12 @@ export function Tabs({ param, tabs }: { param: string; tabs: { value: string; la
   );
 }
 
-export function SubmitButton({ children, className = "btn-primary", confirm, name, value }: {
+export function SubmitButton({ children, className = "btn-primary", confirm, name, value, title, style, disabled }: {
   children: ReactNode;
   className?: string;
+  title?: string;
+  style?: CSSProperties;
+  disabled?: boolean;
   confirm?: string;
   name?: string;
   value?: string;
@@ -131,7 +134,9 @@ export function SubmitButton({ children, className = "btn-primary", confirm, nam
       type="submit"
       name={name}
       value={value}
-      disabled={pending}
+      disabled={pending || disabled}
+      title={title}
+      style={style}
       className={className}
       onClick={(e) => {
         if (confirm && !window.confirm(confirm)) return e.preventDefault();

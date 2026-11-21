@@ -13,7 +13,7 @@ import {
   type Status,
 } from "@/lib/catalog";
 import { createMandi, updateMandi } from "@/lib/mandis";
-import { autoMergeSafeDuplicates, mergeDuplicatesInto } from "@/lib/mandi-duplicates";
+import { autoMergeSafeDuplicates, mergeOneInto } from "@/lib/mandi-duplicates";
 import { approveConfidentMandiGuesses } from "@/lib/mandi-match";
 import { deletePrices, editPrice, isProblem } from "@/lib/prices";
 import { SESSION_COOKIE, SESSION_MAX_AGE, signSession } from "@/lib/session";
@@ -204,12 +204,12 @@ export async function bulkApproveMandiGuessesAction(form: FormData) {
   });
 }
 
-/** Move every name linked to a same-named copy over to the chosen mandi. */
-export async function mergeDuplicateMandisAction(form: FormData) {
+/** Move the names of one mandi copy onto another copy (one pair at a time). */
+export async function mergeTwoMandisAction(form: FormData) {
   return act(form, async () => {
     const user = await requireEditor();
-    const r = await mergeDuplicatesInto(await getDb(), user, needId(form, "intoId", "mandi"));
-    return `Moved ${r.names} mandi name(s) and ${r.listings} listings from ${r.copies} same-named mandi(s).`;
+    const r = await mergeOneInto(await getDb(), user, needId(form, "fromId", "mandi"), needId(form, "intoId", "mandi"));
+    return `Moved ${r.names} mandi name(s) and ${r.listings} listings from ${r.fromName} to ${r.intoName}.`;
   });
 }
 

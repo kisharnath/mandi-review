@@ -14,7 +14,7 @@ import {
 } from "../src/lib/catalog";
 import { COLL } from "../src/lib/db";
 import { createMandi } from "../src/lib/mandis";
-import { autoMergeSafeDuplicates, findDuplicateGroups, mergeDuplicatesInto } from "../src/lib/mandi-duplicates";
+import { autoMergeSafeDuplicates, findDuplicateGroups, mergeDuplicatesInto, mergeOneInto } from "../src/lib/mandi-duplicates";
 import { confidentMandiGuesses } from "../src/lib/mandi-match";
 import { badPriceCounts, deletePrices, editPrice, listBadPrices } from "../src/lib/prices";
 
@@ -274,4 +274,26 @@ test("duplicate mandis: found, merged onto the most complete copy, and no longer
   assert.equal((await findDuplicateGroups(db, { state: gj }))[0].linkedCopies, 1);
   assert.equal(await db.collection(COLL.audit).countDocuments({ action: "mandi_duplicate.auto_merge" }), 1);
   await assert.rejects(mergeDuplicatesInto(db, user, lone), /No other mandi has the same name/);
+});
+
+test("duplicate mandis: merging one pair moves only that copy's names", async () => {
+  await db.collection(COLL.states).insertOne({ _id: "kerala" as unknown as ObjectId, name: "kerala", spellings: ["kerala"] });
+  const [x, y, z, other] = [new ObjectId(), new ObjectId(), new ObjectId(), new ObjectId()];
+  await db.collection(COLL.mandis).insertMany([
+    { _id: x, name: "Kozhikode", state: "kerala", district: "Kozhikode" },
+    { _id: y, name: "Kozhikode APMC", state: "kerala", district: "Kozhikode" },
+    { _id: z, name: "Kozhikode Mandi", state: "kerala", district: "Wayanad" },
+    { _id: other, name: "Thrissur", state: "kerala" },
+  ]);
+  const mk = (raw: string, mandi: ObjectId) => ({ _id: new ObjectId(), source: "agmarknet", state_code: "kerala", raw_name: raw, mandi_id: mandi, status: "approved", listings: 2 });
+  const [nx, ny, nz] = [mk("kozhikode", x), mk("kozhikode apmc", y), mk("kozhikode mandi", z)];
+  await db.collection(COLL.mandiNames).insertMany([nx, ny, nz]);
+  const r = await mergeOneInto(db, user, y, x);
+  assert.equal(r.names, 1);
+  const at = async (n: { _id: ObjectId }) => String((await db.collection(COLL.mandiNames).findOne({ _id: n._id }))!.mandi_id);
+  assert.equal(await at(ny), String(x));
+  assert.equal(await at(nz), String(z)); // the different-district copy is untouched
+  await assert.rejects(mergeOneInto(db, user, other, x), /not same-named copies/);
+  await assert.rejects(mergeOneInto(db, user, x, x), /two different mandis/);
+  assert.equal(await db.collection(COLL.audit).countDocuments({ action: "mandi_duplicate.merge_one" }), 1);
 });

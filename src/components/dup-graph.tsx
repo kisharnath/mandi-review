@@ -4,13 +4,14 @@ import clsx from "clsx";
 import { MapPin } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { mergeDuplicateMandisAction, relinkMandiNameAction } from "@/app/actions";
+import { mergeTwoMandisAction, relinkMandiNameAction } from "@/app/actions";
 import { SubmitButton } from "@/components/client";
 
 export type GraphMandi = { id: string; name: string; district: string | null; postcode: string | null; hasLocation: boolean; source: string | null; listings: number; keep: boolean };
 export type GraphName = { id: string; raw: string; source: string; status: string; listings: number; mandiId: string | null };
 
 /** One colour per mandi copy, so every line says which copy a name points at. */
+const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const COLORS = ["#047857", "#0369a1", "#7c3aed", "#c2410c", "#be123c", "#0f766e"];
 
 const NH = 52; // name node height
@@ -27,6 +28,7 @@ export function DupGraph({ mandis, names, editor, back }: { mandis: GraphMandi[]
   const [hover, setHover] = useState<string | null>(null);
   const [move, setMove] = useState<{ name: GraphName; mandi: GraphMandi } | null>(null);
 
+  const letterOf = new Map(mandis.map((m, i) => [m.id, LETTERS[i % 26]]));
   const colorOf = new Map(mandis.map((m, i) => [m.id, COLORS[i % COLORS.length]]));
   const nameY = (i: number) => i * (NH + NG) + NH / 2;
   const mandiY = (j: number) => j * (MH + MG) + MH / 2;
@@ -64,7 +66,7 @@ export function DupGraph({ mandis, names, editor, back }: { mandis: GraphMandi[]
               <button type="button" className="underline" onClick={() => setSelected(null)}>Clear</button>
             </div>
           ) : (
-            <div className="rounded-lg bg-zinc-50 px-3 py-2 text-zinc-600">To change a link: click a mandi name on the left, then click the mandi it belongs to.</div>
+            <div className="rounded-lg bg-zinc-50 px-3 py-2 text-zinc-600">To change one link: click a mandi name on the left, then the mandi it belongs to. To merge two copies: use “Merge into” on a card (A, B… are the letters on each mandi).</div>
           )}
         </div>
       )}
@@ -138,6 +140,7 @@ export function DupGraph({ mandis, names, editor, back }: { mandis: GraphMandi[]
                 )}
               >
                 <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[10px] font-bold text-white" style={{ background: color }}>{letterOf.get(m.id)}</span>
                   <Link href={`/mandis/${m.id}`} onClick={(e) => (targetable ? e.preventDefault() : e.stopPropagation())} className="truncate text-sm font-semibold text-zinc-900 hover:underline">{m.name}</Link>
                   {m.keep && <span className="rounded bg-emerald-100 px-1 text-[11px] font-medium text-emerald-800">keep</span>}
                 </div>
@@ -148,16 +151,28 @@ export function DupGraph({ mandis, names, editor, back }: { mandis: GraphMandi[]
                   <span className="tabular-nums">{m.listings} listings</span>
                 </div>
                 {editor && mandis.length > 1 && (
-                  <form action={mergeDuplicateMandisAction} className="mt-2" onClick={(e) => e.stopPropagation()}>
-                    <input type="hidden" name="back" value={back} />
-                    <input type="hidden" name="intoId" value={m.id} />
-                    <SubmitButton
-                      className="text-xs font-medium text-emerald-700 hover:underline"
-                      confirm={`Move every name linked to the other ${mandis.length - 1} cop${mandis.length === 2 ? "y" : "ies"} onto ${m.name}${m.district ? `, ${m.district}` : ""}?`}
-                    >
-                      Merge all others into this →
-                    </SubmitButton>
-                  </form>
+                  <div className="mt-2 flex items-center gap-1 overflow-x-auto text-xs text-zinc-500" onClick={(e) => e.stopPropagation()}>
+                    <span className="shrink-0">Merge into</span>
+                    {mandis.filter((o) => o.id !== m.id).map((o) => {
+                      const count = names.filter((n) => n.mandiId === m.id).length;
+                      return (
+                        <form key={o.id} action={mergeTwoMandisAction} className="shrink-0">
+                          <input type="hidden" name="back" value={back} />
+                          <input type="hidden" name="fromId" value={m.id} />
+                          <input type="hidden" name="intoId" value={o.id} />
+                          <SubmitButton
+                            className="flex h-6 min-w-6 items-center justify-center rounded px-1.5 text-[11px] font-bold text-white hover:opacity-80 disabled:opacity-30"
+                            title={count ? `Move the ${count} name(s) of ${letterOf.get(m.id)} to ${o.name}${o.district ? `, ${o.district}` : ""}` : "No names are linked to this copy"}
+                            style={{ background: colorOf.get(o.id) }}
+                            disabled={count === 0}
+                            confirm={`Move ${count} name(s) linked to ${m.name}${m.district ? `, ${m.district}` : ""} (${letterOf.get(m.id)}) onto ${o.name}${o.district ? `, ${o.district}` : ""} (${letterOf.get(o.id)})? Other copies are not changed.`}
+                          >
+                            → {letterOf.get(o.id)}
+                          </SubmitButton>
+                        </form>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             );

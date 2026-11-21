@@ -109,11 +109,10 @@ export async function findDuplicateGroups(db: Db, opts: { state?: string } = {})
 
 export const sumListings = (g: DupGroup) => g.members.reduce((n, m) => n + m.listings, 0);
 
-/**
- * Point every mandi name (and its listings) that is linked to a same-named copy at `intoId`.
- * available_mandi is not touched: it is shared with v1, so copies are never deleted here.
- */
-export async function mergeDuplicatesInto(db: Db, user: SessionUser, intoId: ObjectId, opts: { auto?: boolean } = {}) {
+type Copy = { _id: ObjectId };
+
+/** The mandi `intoId` and the other mandis in its state with the same cleaned name. */
+async function sameNamedCopies(db: Db, intoId: ObjectId) {
   const mandis = db.collection(COLL.mandis);
   const into = await mandis.findOne({ _id: intoId }, { projection: MANDI_FIELDS });
   if (!into) throw new Error("That mandi no longer exists.");
@@ -126,24 +125,32 @@ export async function mergeDuplicatesInto(db: Db, user: SessionUser, intoId: Obj
     .maxTimeMS(MAX_TIME_MS)
     .toArray();
   const copies = pool.filter((m) => String(m._id) !== String(intoId) && mandiKey(String(m.name ?? "")) === key);
-  if (!copies.length) throw new Error("No other mandi has the same name in this state.");
+  return { into, code, key, copies };
+}
 
+/** Move the names (and their listings) linked to `from` over to `intoId`. */
+async function moveLinks(db: Db, user: SessionUser, from: Copy, intoId: ObjectId, auto: boolean) {
   const names = db.collection(COLL.mandiNames);
-  const now = new Date();
-  let nameCount = 0;
-  let listingCount = 0;
-  const moved: { from: ObjectId; names: number; listings: number }[] = [];
-  for (const c of copies) {
-    const n = await names.updateMany(
-      { mandi_id: c._id },
-      { $set: { mandi_id: intoId, decided_by: user.name, decided_at: now, ...(opts.auto ? { needs_check: true } : {}) } },
-    );
-    await names.updateMany({ "suggestion.mandi_id": c._id }, { $set: { "suggestion.mandi_id": intoId } });
-    const l = await db.collection(COLL.listings).updateMany({ mandi_id: c._id }, { $set: { mandi_id: intoId } });
-    nameCount += n.modifiedCount;
-    listingCount += l.modifiedCount;
-    moved.push({ from: c._id, names: n.modifiedCount, listings: l.modifiedCount });
-  }
+  const n = await names.updateMany(
+    { mandi_id: from._id },
+    { $set: { mandi_id: intoId, decided_by: user.name, decided_at: new Date(), ...(auto ? { needs_check: true } : {}) } },
+  );
+  await names.updateMany({ "suggestion.mandi_id": from._id }, { $set: { "suggestion.mandi_id": intoId } });
+  const l = await db.collection(COLL.listings).updateMany({ mandi_id: from._id }, { $set: { mandi_id: intoId } });
+  return { from: from._id, names: n.modifiedCount, listings: l.modifiedCount };
+}
+
+/**
+ * Point every mandi name (and its listings) linked to a same-named copy at `intoId`.
+ * available_mandi is not touched: it is shared with v1, so copies are never deleted here.
+ */
+export async function mergeDuplicatesInto(db: Db, user: SessionUser, intoId: ObjectId, opts: { auto?: boolean } = {}) {
+  const { into, code, key, copies } = await sameNamedCopies(db, intoId);
+  if (!copies.length) throw new Error("No other mandi has the same name in this state.");
+  const moved = [];
+  for (const c of copies) moved.push(await moveLinks(db, user, c, intoId, !!opts.auto));
+  const nameCount = moved.reduce((n, m) => n + m.names, 0);
+  const listingCount = moved.reduce((n, m) => n + m.listings, 0);
   await writeAudit(db, user, {
     action: opts.auto ? "mandi_duplicate.auto_merge" : "mandi_duplicate.merge",
     summary: `Moved ${nameCount} mandi name(s) from ${copies.length} same-named mandi(s) to "${into.name}" (${into.state})`,
@@ -152,6 +159,22 @@ export async function mergeDuplicatesInto(db: Db, user: SessionUser, intoId: Obj
     counts: { names: nameCount, listings: listingCount },
   });
   return { names: nameCount, listings: listingCount, copies: copies.length };
+}
+
+/** Merge exactly one copy into another; any other copy is left as it is. */
+export async function mergeOneInto(db: Db, user: SessionUser, fromId: ObjectId, intoId: ObjectId) {
+  if (String(fromId) === String(intoId)) throw new Error("Choose two different mandis.");
+  const { into, code, key, copies } = await sameNamedCopies(db, intoId);
+  const from = copies.find((c) => String(c._id) === String(fromId));
+  if (!from) throw new Error("Those two mandis are not same-named copies in one state.");
+  const moved = await moveLinks(db, user, from, intoId, false);
+  await writeAudit(db, user, {
+    action: "mandi_duplicate.merge_one",
+    summary: `Moved ${moved.names} mandi name(s) from "${from.name}" to "${into.name}" (${into.state})`,
+    target: { from_mandi_id: fromId, mandi_id: intoId, state_code: code, key },
+    counts: { names: moved.names, listings: moved.listings },
+  });
+  return { names: moved.names, listings: moved.listings, fromName: String(from.name ?? ""), intoName: String(into.name ?? "") };
 }
 
 /** Merge every safe group (no district conflict) that has names on more than one copy. */
