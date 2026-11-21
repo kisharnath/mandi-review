@@ -16,6 +16,7 @@ export default async function MandiDuplicatesPage({ searchParams }: { searchPara
   const user = await requireUser();
   const editor = canEdit(user);
   const canRemove = MANDI_DELETE_ENABLED && user.role === "admin";
+  const removeBlocked = !MANDI_DELETE_ENABLED ? "removing is turned off (ALLOW_MANDI_DELETE is not set to true)." : user.role !== "admin" ? "only an admin can remove records." : null;
   const tab = first(sp.tab) || "merge";
   const state = first(sp.state);
   const q = first(sp.q).trim().toLowerCase();
@@ -96,7 +97,7 @@ export default async function MandiDuplicatesPage({ searchParams }: { searchPara
       ) : (
         <div className="space-y-4">
           {page.map((g) => (
-            <GroupCard key={`${g.stateCode}|${g.key}`} g={g} back={back} editor={editor} canRemove={canRemove} stateLabel={titleCase(names[g.stateCode] ?? g.stateCode.replace(/^\?/, ""))} />
+            <GroupCard key={`${g.stateCode}|${g.key}`} g={g} back={back} editor={editor} canRemove={canRemove} removeBlocked={removeBlocked} stateLabel={titleCase(names[g.stateCode] ?? g.stateCode.replace(/^\?/, ""))} />
           ))}
           {shown.length > page.length && <p className="text-xs text-zinc-500">Showing {page.length} of {fmtNumber(shown.length)}. Narrow with the state filter or search.</p>}
         </div>
@@ -105,11 +106,18 @@ export default async function MandiDuplicatesPage({ searchParams }: { searchPara
   );
 }
 
-function GroupCard({ g, back, editor, canRemove, stateLabel }: { g: DupGroup; back: string; editor: boolean; canRemove: boolean; stateLabel: string }) {
+/** [lon, lat] of a GeoJSON point, or null. */
+function coords(location: unknown): [number, number] | null {
+  const c = (location as { coordinates?: unknown } | null)?.coordinates;
+  return Array.isArray(c) && typeof c[0] === "number" && typeof c[1] === "number" ? [c[0], c[1]] : null;
+}
+
+function GroupCard({ g, back, editor, canRemove, removeBlocked, stateLabel }: { g: DupGroup; back: string; editor: boolean; canRemove: boolean; removeBlocked: string | null; stateLabel: string }) {
   const main = g.members[0];
   const mandis: GraphMandi[] = g.members.map((m, i) => ({
     id: String(m._id), name: titleCase(m.name), district: m.district ? titleCase(m.district) : null, postcode: m.postcode,
-    hasLocation: !!m.location, source: m.source, keep: i === 0,
+    source: m.source, keep: i === 0, aliases: m.aliases, createdAt: m.createdAt, updatedAt: m.updatedAt,
+    lat: coords(m.location)?.[1] ?? null, lon: coords(m.location)?.[0] ?? null,
   }));
   const names: GraphName[] = [
     ...g.members.flatMap((m) => m.links.map((l) => ({ id: String(l._id), raw: l.raw_name, source: l.source, status: l.status, listings: l.listings ?? 0, mandiId: String(m._id) }))),
@@ -129,7 +137,7 @@ function GroupCard({ g, back, editor, canRemove, stateLabel }: { g: DupGroup; ba
           <span />
           <span>Mandis (the copies)</span>
         </div>
-        <DupGraph mandis={mandis} names={names} editor={editor} canRemove={canRemove} back={back} />
+        <DupGraph mandis={mandis} names={names} editor={editor} canRemove={canRemove} removeBlocked={removeBlocked} back={back} />
       </div>
     </div>
   );

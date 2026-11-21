@@ -19,6 +19,9 @@ export type DupMember = {
   postcode: string | null;
   location: unknown;
   source: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  aliases: string[];
   /** Mandi names (per source) that are linked to this mandi. */
   links: Pick<MandiNameDoc, "_id" | "raw_name" | "source" | "status" | "listings">[];
   listings: number;
@@ -51,7 +54,7 @@ async function spellingMap(db: Db): Promise<{ toCode: (spelling: unknown) => str
   };
 }
 
-const MANDI_FIELDS = { name: 1, state: 1, district: 1, postcode: 1, location: 1, source: 1 } as const;
+const MANDI_FIELDS = { name: 1, state: 1, district: 1, postcode: 1, location: 1, source: 1, createdAt: 1, updatedAt: 1, aliases: 1 } as const;
 
 /** Every set of mandis in one state whose names are the same once spelling noise is removed. */
 export async function findDuplicateGroups(db: Db, opts: { state?: string } = {}): Promise<DupGroup[]> {
@@ -91,6 +94,9 @@ export async function findDuplicateGroups(db: Db, opts: { state?: string } = {})
         postcode: m.postcode ? String(m.postcode) : null,
         location: m.location ?? null,
         source: m.source ? String(m.source) : null,
+        createdAt: m.createdAt ? new Date(m.createdAt).toISOString() : null,
+        updatedAt: m.updatedAt ? new Date(m.updatedAt).toISOString() : null,
+        aliases: Array.isArray(m.aliases) ? m.aliases.map(String) : [],
         links,
         listings: links.reduce((n, l) => n + (l.listings ?? 0), 0),
       };
