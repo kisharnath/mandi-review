@@ -20,6 +20,7 @@ export const COLL = {
   runs: process.env.INGESTION_RUNS_COLLECTION || `${P}ingestion_runs`,
   review: process.env.REVIEW_ITEMS_COLLECTION || `${P}review_items`,
   audit: process.env.AUDIT_COLLECTION || `${P}audit_log`,
+  deletedMandis: process.env.DELETED_MANDIS_COLLECTION || `${P}deleted_available_mandi`,
   deletedPrices: process.env.DELETED_PRICES_COLLECTION || `${P}deleted_price_records`,
 } as const;
 

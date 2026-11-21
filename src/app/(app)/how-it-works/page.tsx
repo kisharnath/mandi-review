@@ -54,6 +54,7 @@ export default async function HowItWorksPage() {
     { name: COLL.mandis, job: "The mandi list with locations. Shared with v1 and never changed by v2 except through this site.", writer: "This site", href: `/data/${COLL.mandis}` },
     { name: COLL.runs, job: "One row per scrape run and source: how many rows came in, what failed.", writer: "Scraper", href: "/runs" },
     { name: COLL.review, job: "Problems found during a run: unknown names, odd prices, failed sources.", writer: "Scraper; closed on this site", href: "/review" },
+    { name: COLL.deletedMandis, job: "A copy of every duplicate mandi removed from the mandi list on the Duplicate mandis page (needs ALLOW_MANDI_DELETE=true).", writer: "This site", href: `/data/${COLL.deletedMandis}` },
     { name: COLL.deletedPrices, job: "A copy of every price deleted on the Wrong prices page.", writer: "This site", href: `/data/${COLL.deletedPrices}` },
     { name: COLL.audit, job: "Every change made on this site: who, when, what.", writer: "This site", href: `/data/${COLL.audit}` },
   ];

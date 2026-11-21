@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { ArrowRight, MapPin } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { mergeTwoMandisAction, relinkMandiNameAction } from "@/app/actions";
+import { mergeTwoMandisAction, relinkMandiNameAction, removeDuplicateMandiAction } from "@/app/actions";
 import { SubmitButton } from "@/components/client";
 
 export type GraphMandi = { id: string; name: string; district: string | null; postcode: string | null; hasLocation: boolean; source: string | null; keep: boolean };
@@ -19,7 +19,7 @@ const NG = 8; // gap between name nodes
 const MH = 150; // mandi node height
 const MG = 12;
 
-type Pending = { kind: "name"; name: GraphName; to: GraphMandi } | { kind: "copy"; from: GraphMandi; to: GraphMandi };
+type Pending = { kind: "name"; name: GraphName; to: GraphMandi } | { kind: "copy" | "remove"; from: GraphMandi; to: GraphMandi };
 
 /**
  * Link graph for one group of same-named mandis: mandi names on the left, the mandi copies on
@@ -28,7 +28,7 @@ type Pending = { kind: "name"; name: GraphName; to: GraphMandi } | { kind: "copy
  *  - click a mandi name, then the mandi it should point to (moves that one name);
  *  - click "Merge into another…" on a mandi, then the copy that keeps its names.
  */
-export function DupGraph({ mandis, names, editor, back }: { mandis: GraphMandi[]; names: GraphName[]; editor: boolean; back: string }) {
+export function DupGraph({ mandis, names, editor, canRemove, back }: { mandis: GraphMandi[]; names: GraphName[]; editor: boolean; canRemove: boolean; back: string }) {
   const [selName, setSelName] = useState<string | null>(null);
   const [mergeFrom, setMergeFrom] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
@@ -43,7 +43,7 @@ export function DupGraph({ mandis, names, editor, back }: { mandis: GraphMandi[]
 
   // Where each name will point if the pending change is saved.
   const movedTo = (n: GraphName): string | null =>
-    pending?.kind === "name" && pending.name.id === n.id ? pending.to.id : pending?.kind === "copy" && n.mandiId === pending.from.id ? pending.to.id : null;
+    pending?.kind === "name" && pending.name.id === n.id ? pending.to.id : pending?.kind !== "name" && pending && n.mandiId === pending.from.id ? pending.to.id : null;
   const effective = (n: GraphName) => movedTo(n) ?? n.mandiId;
 
   const nameY = (i: number) => i * (NH + NG) + NH / 2;
@@ -69,7 +69,7 @@ export function DupGraph({ mandis, names, editor, back }: { mandis: GraphMandi[]
       {editor && (
         <div className="mb-3 text-xs">
           {pending ? (
-            <Confirm pending={pending} back={back} label={label} namesOf={namesOf} listingsOf={listingsOf} onCancel={() => setPending(null)} />
+            <Confirm pending={pending} back={back} canRemove={canRemove} label={label} namesOf={namesOf} listingsOf={listingsOf} onCancel={() => setPending(null)} />
           ) : from ? (
             <div className="flex flex-wrap items-center gap-2 rounded-lg bg-sky-50 px-3 py-2 text-sky-900">
               <span>
@@ -153,10 +153,10 @@ export function DupGraph({ mandis, names, editor, back }: { mandis: GraphMandi[]
             const ns = namesOf(m.id);
             const total = listingsOf(m.id);
             const targetable = editor && !pending && ((!!selected && selected.mandiId !== m.id) || (!!from && from.id !== m.id));
-            const isSource = from?.id === m.id || (pending?.kind === "copy" && pending.from.id === m.id);
+            const isSource = from?.id === m.id || (!!pending && pending.kind !== "name" && pending.from.id === m.id);
             const isTarget = pending?.to.id === m.id;
             const dim = !targetable && !pending && !isSource && !!focus && focus !== m.id && !names.some((n) => n.id === focus && n.mandiId === m.id);
-            const gain = pending ? (pending.kind === "copy" ? listingsOf(pending.from.id) : pending.name.listings) : 0;
+            const gain = pending ? (pending.kind === "name" ? pending.name.listings : listingsOf(pending.from.id)) : 0;
             return (
               <div
                 key={m.id}
@@ -178,7 +178,7 @@ export function DupGraph({ mandis, names, editor, back }: { mandis: GraphMandi[]
                   <Link href={`/mandis/${m.id}`} onClick={(e) => (targetable ? e.preventDefault() : e.stopPropagation())} className="truncate text-sm font-semibold text-zinc-900 hover:underline">{m.name}</Link>
                   {m.keep && <span className="rounded bg-emerald-100 px-1 text-[11px] font-medium text-emerald-800">main</span>}
                   {targetable && <span className="ml-auto shrink-0 rounded bg-sky-600 px-1.5 text-[11px] font-medium text-white">{from ? "Keep names here" : "Link here"}</span>}
-                  {isSource && <span className="ml-auto shrink-0 rounded bg-amber-500 px-1.5 text-[11px] font-medium text-white">Merging away</span>}
+                  {isSource && <span className={clsx("ml-auto shrink-0 rounded px-1.5 text-[11px] font-medium text-white", pending?.kind === "remove" ? "bg-red-600" : "bg-amber-500")}>{pending?.kind === "remove" ? "Removing" : "Merging away"}</span>}
                   {isTarget && <span className="ml-auto shrink-0 rounded bg-emerald-600 px-1.5 text-[11px] font-medium text-white">Receives</span>}
                 </div>
                 <div className="mt-0.5 text-xs text-zinc-600">{m.district ?? <span className="text-zinc-400">no district</span>}{m.postcode ? ` · ${m.postcode}` : ""}</div>
@@ -189,13 +189,20 @@ export function DupGraph({ mandis, names, editor, back }: { mandis: GraphMandi[]
                 <div className="mt-0.5 text-xs font-medium text-zinc-800 tabular-nums">
                   {ns.length} name{ns.length === 1 ? "" : "s"} · {total} listings
                   {isTarget && <span className="text-emerald-700"> → {total + gain} after</span>}
-                  {pending?.kind === "copy" && pending.from.id === m.id && <span className="text-amber-700"> → 0 after</span>}
+                  {pending && pending.kind !== "name" && pending.from.id === m.id && <span className="text-amber-700"> → {pending.kind === "remove" ? "removed" : "0 after"}</span>}
                 </div>
                 {editor && mandis.length > 1 && !pending && !from && !selected && (
                   m.keep ? (
                     <div className="mt-1.5 text-xs text-emerald-700">Main copy: the others merge into this one.</div>
                   ) : ns.length === 0 ? (
-                    <div className="mt-1.5 text-xs text-zinc-400">No names linked: nothing to merge.</div>
+                    <div className="mt-1.5 text-xs text-zinc-400">
+                      No names linked: nothing to merge.
+                      {canRemove && (
+                        <button type="button" className="ml-2 font-medium text-red-700 hover:underline" onClick={(e) => { e.stopPropagation(); setSelName(null); setMergeFrom(null); setPending({ kind: "remove", from: m, to: main }); }}>
+                          Remove from mandi list
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <div className="mt-1.5 space-y-1" onClick={(e) => e.stopPropagation()}>
                       <button
@@ -223,22 +230,23 @@ export function DupGraph({ mandis, names, editor, back }: { mandis: GraphMandi[]
 }
 
 /** Plain-words summary of what will change, with before/after numbers, and the save button. */
-function Confirm({ pending, back, label, namesOf, listingsOf, onCancel }: {
+function Confirm({ pending, back, canRemove, label, namesOf, listingsOf, onCancel }: {
   pending: Pending;
   back: string;
+  canRemove: boolean;
   label: (m: GraphMandi) => string;
   namesOf: (id: string) => GraphName[];
   listingsOf: (id: string) => number;
   onCancel: () => void;
 }) {
   const to = pending.to;
-  const moving = pending.kind === "copy" ? namesOf(pending.from.id) : [pending.name];
+  const moving = pending.kind === "name" ? [pending.name] : namesOf(pending.from.id);
   const listings = moving.reduce((n, x) => n + x.listings, 0);
-  const fromMandi = pending.kind === "copy" ? pending.from : null;
+  const fromMandi = pending.kind === "name" ? null : pending.from;
   return (
-    <form action={pending.kind === "copy" ? mergeTwoMandisAction : relinkMandiNameAction} className="space-y-2 rounded-lg bg-amber-50 px-3 py-2.5 text-amber-950">
+    <form action={pending.kind === "remove" ? removeDuplicateMandiAction : pending.kind === "copy" ? mergeTwoMandisAction : relinkMandiNameAction} className={clsx("space-y-2 rounded-lg px-3 py-2.5", pending.kind === "remove" ? "bg-red-50 text-red-950" : "bg-amber-50 text-amber-950")}>
       <input type="hidden" name="back" value={back} />
-      {pending.kind === "copy" ? (
+      {pending.kind !== "name" ? (
         <>
           <input type="hidden" name="fromId" value={pending.from.id} />
           <input type="hidden" name="intoId" value={to.id} />
@@ -249,17 +257,30 @@ function Confirm({ pending, back, label, namesOf, listingsOf, onCancel }: {
           <input type="hidden" name="mandiId" value={to.id} />
         </>
       )}
+      {pending.kind === "remove" ? (
+        <div className="text-sm">
+          Remove <b>{label(pending.from)}</b> from the <b>available_mandi</b> list. No mandi name uses it. A copy of the record is saved so it can be restored. <b>v1 loses it too</b>, because the list is shared.
+        </div>
+      ) : (
       <div className="text-sm">
         Move <b>{moving.length} name{moving.length === 1 ? "" : "s"}</b> ({moving.map((n) => `“${n.raw}”`).join(", ")}) with <b>{listings} listings</b>
         {fromMandi ? <> from <b>{label(fromMandi)}</b></> : null} <ArrowRight className="mx-0.5 inline h-4 w-4" /> <b>{label(to)}</b>
       </div>
-      <ul className="list-disc space-y-0.5 pl-5">
-        <li>{label(to)}: {listingsOf(to.id)} → <b>{listingsOf(to.id) + listings} listings</b></li>
-        {fromMandi && <li>{label(fromMandi)}: {listingsOf(fromMandi.id)} → <b>0 listings</b> (stays in the shared mandi list, unused)</li>}
-        <li>Other copies are not changed.</li>
-      </ul>
+      )}
+      {pending.kind !== "remove" && (
+        <ul className="list-disc space-y-0.5 pl-5">
+          <li>{label(to)}: {listingsOf(to.id)} → <b>{listingsOf(to.id) + listings} listings</b></li>
+          {fromMandi && <li>{label(fromMandi)}: {listingsOf(fromMandi.id)} → <b>0 listings</b> (stays in the shared mandi list unless you tick the box below)</li>}
+          <li>Other copies are not changed.</li>
+        </ul>
+      )}
+      {pending.kind === "copy" && canRemove && (
+        <label className="flex items-center gap-2 font-medium text-red-800">
+          <input type="checkbox" name="remove" /> Also remove {label(pending.from)} from the available_mandi list afterwards (a copy is kept; v1 loses it too)
+        </label>
+      )}
       <div className="flex gap-2">
-        <SubmitButton className="btn-primary">Yes, move them</SubmitButton>
+        <SubmitButton className={pending.kind === "remove" ? "btn-danger" : "btn-primary"}>{pending.kind === "remove" ? "Yes, remove it" : "Yes, move them"}</SubmitButton>
         <button type="button" className="btn-secondary" onClick={onCancel}>Cancel</button>
       </div>
     </form>

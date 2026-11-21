@@ -14,7 +14,7 @@ import {
 } from "../src/lib/catalog";
 import { COLL } from "../src/lib/db";
 import { createMandi } from "../src/lib/mandis";
-import { autoMergeSafeDuplicates, findDuplicateGroups, mergeDuplicatesInto, mergeOneInto } from "../src/lib/mandi-duplicates";
+import { autoMergeSafeDuplicates, autoRemoveUnusedCopies, findDuplicateGroups, mergeDuplicatesInto, mergeOneInto, removeDuplicateMandi } from "../src/lib/mandi-duplicates";
 import { confidentMandiGuesses } from "../src/lib/mandi-match";
 import { badPriceCounts, deletePrices, editPrice, listBadPrices } from "../src/lib/prices";
 
@@ -296,4 +296,43 @@ test("duplicate mandis: merging one pair moves only that copy's names", async ()
   await assert.rejects(mergeOneInto(db, user, other, x), /not same-named copies/);
   await assert.rejects(mergeOneInto(db, user, x, x), /two different mandis/);
   assert.equal(await db.collection(COLL.audit).countDocuments({ action: "mandi_duplicate.merge_one" }), 1);
+});
+
+test("duplicate mandis: removing a copy re-points what uses it, keeps a restorable copy and only touches available_mandi", async () => {
+  await db.collection(COLL.states).insertOne({ _id: "goa" as unknown as ObjectId, name: "goa", spellings: ["goa"] });
+  const [main, used, unused, far, other] = [new ObjectId(), new ObjectId(), new ObjectId(), new ObjectId(), new ObjectId()];
+  await db.collection(COLL.mandis).insertMany([
+    { _id: main, name: "Mapusa", state: "goa", district: "North Goa" },
+    { _id: used, name: "Mapusa APMC", state: "goa", district: "North Goa", postcode: "403507" },
+    { _id: unused, name: "mapusa mandi", state: "goa" },
+    { _id: far, name: "Mapusa (Market)", state: "goa", district: "South Goa" },
+    { _id: other, name: "Margao", state: "goa" },
+  ]);
+  const nm = { _id: new ObjectId(), source: "enam", state_code: "goa", raw_name: "mapusa apmc", mandi_id: used, status: "approved", listings: 4 };
+  const nMain = { _id: new ObjectId(), source: "agmarknet", state_code: "goa", raw_name: "mapusa", mandi_id: main, status: "approved", listings: 9 };
+  await db.collection(COLL.mandiNames).insertMany([nm, nMain]);
+  const lst = new ObjectId();
+  await db.collection(COLL.listings).insertOne({ _id: lst, source_system: "enam", state_code: "goa", market_name: "mapusa apmc", mandi_id: used });
+
+  const r = await removeDuplicateMandi(db, user, used, main);
+  assert.deepEqual([r.names, r.listings], [1, 1]);
+  assert.equal(await db.collection(COLL.mandis).countDocuments({ _id: used }), 0);
+  const archived = await db.collection(COLL.deletedMandis).findOne({ _id: used });
+  assert.equal(archived!.name, "Mapusa APMC");
+  assert.equal(archived!.deleted_by, "tester");
+  assert.equal(String(archived!.merged_into), String(main));
+  assert.equal(String((await db.collection(COLL.mandiNames).findOne({ _id: nm._id }))!.mandi_id), String(main));
+  assert.equal(String((await db.collection(COLL.listings).findOne({ _id: lst }))!.mandi_id), String(main));
+  assert.equal(await db.collection(COLL.mandiNames).countDocuments({ _id: nMain._id, mandi_id: main }), 1); // the source names themselves stay
+
+  await assert.rejects(removeDuplicateMandi(db, user, other, main), /not same-named copies/);
+  await assert.rejects(removeDuplicateMandi(db, user, main, main), /two different mandis/);
+
+  // "mapusa mandi" has no district and no names: removed in bulk. The South Goa copy is a different place: left alone.
+  const bulk = await autoRemoveUnusedCopies(db, user, "goa");
+  assert.deepEqual(bulk, { removed: 1 });
+  assert.equal(await db.collection(COLL.mandis).countDocuments({ _id: unused }), 0);
+  assert.equal(await db.collection(COLL.mandis).countDocuments({ _id: far }), 1);
+  assert.equal(await db.collection(COLL.deletedMandis).countDocuments({}), 2);
+  assert.equal(await db.collection(COLL.audit).countDocuments({ action: /^mandi_duplicate\.(auto_)?remove$/ }), 2);
 });

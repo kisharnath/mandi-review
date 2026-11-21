@@ -8,6 +8,9 @@ import { mandiKey } from "./heuristics";
 import { districtsCompatible, rankMandis } from "./mandi-dup-rules";
 import type { SessionUser } from "./session";
 
+/** Removing records from available_mandi is off unless ALLOW_MANDI_DELETE=true (the list is shared with v1). */
+export const MANDI_DELETE_ENABLED = process.env.ALLOW_MANDI_DELETE === "true";
+
 export type DupMember = {
   _id: ObjectId;
   name: string;
@@ -175,6 +178,55 @@ export async function mergeOneInto(db: Db, user: SessionUser, fromId: ObjectId, 
     counts: { names: moved.names, listings: moved.listings },
   });
   return { names: moved.names, listings: moved.listings, fromName: String(from.name ?? ""), intoName: String(into.name ?? "") };
+}
+
+/**
+ * Remove a duplicate record from available_mandi. Anything that uses it (mandi names, their
+ * listings and guesses) is first moved onto the main copy, so nothing is left pointing at a
+ * record that no longer exists. A full copy of the record is kept in the deleted-mandis
+ * collection (same _id), so it can be put back.
+ */
+export async function removeDuplicateMandi(db: Db, user: SessionUser, fromId: ObjectId, intoId: ObjectId, opts: { auto?: boolean } = {}) {
+  if (!MANDI_DELETE_ENABLED) throw new Error("Removing mandis is turned off. Set ALLOW_MANDI_DELETE=true to allow an admin to remove duplicate records from available_mandi.");
+  if (String(fromId) === String(intoId)) throw new Error("Choose two different mandis.");
+  const { into, code, key, copies } = await sameNamedCopies(db, intoId);
+  if (!copies.some((c) => String(c._id) === String(fromId))) throw new Error("Those two mandis are not same-named copies in one state.");
+  const mandis = db.collection(COLL.mandis);
+  const record = await mandis.findOne({ _id: fromId });
+  if (!record) throw new Error("That mandi no longer exists.");
+  // Keep the copy first: if anything below fails, nothing has been lost.
+  await db.collection(COLL.deletedMandis).replaceOne(
+    { _id: fromId },
+    { ...record, deleted_by: user.name, deleted_at: new Date(), merged_into: intoId, delete_reason: "duplicate mandi" },
+    { upsert: true },
+  );
+  const moved = await moveLinks(db, user, { _id: fromId }, intoId, !!opts.auto);
+  await mandis.deleteOne({ _id: fromId });
+  await writeAudit(db, user, {
+    action: opts.auto ? "mandi_duplicate.auto_remove" : "mandi_duplicate.remove",
+    summary: `Removed duplicate mandi "${record.name}" (${record.state}) from available_mandi; its ${moved.names} name(s) now use "${into.name}"`,
+    target: { mandi_id: fromId, merged_into: intoId, state_code: code, key },
+    before: record,
+    counts: { names: moved.names, listings: moved.listings },
+  });
+  return { names: moved.names, listings: moved.listings, name: String(record.name ?? ""), intoName: String(into.name ?? "") };
+}
+
+/**
+ * Copies that are not the main one, have no mandi names linked, and have no district of their own
+ * or the same district as the main copy. A copy in another district may be a real place, so it stays.
+ */
+export function removableCopies(groups: DupGroup[]) {
+  const d = (m: DupMember) => (m.district ?? "").trim().toLowerCase();
+  return groups.flatMap((g) =>
+    g.members.slice(1).filter((m) => m.links.length === 0 && (!d(m) || d(m) === d(g.members[0]))).map((m) => ({ from: m._id, into: g.members[0]._id })),
+  );
+}
+
+export async function autoRemoveUnusedCopies(db: Db, user: SessionUser, state?: string) {
+  const items = removableCopies(await findDuplicateGroups(db, { state }));
+  for (const it of items) await removeDuplicateMandi(db, user, it.from, it.into, { auto: true });
+  return { removed: items.length };
 }
 
 /** Merge every safe group (no district conflict) that has names on more than one copy. */

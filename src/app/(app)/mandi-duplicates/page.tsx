@@ -1,11 +1,11 @@
-import { autoMergeDuplicateMandisAction } from "@/app/actions";
+import { autoMergeDuplicateMandisAction, autoRemoveUnusedMandisAction } from "@/app/actions";
 import { DupGraph, type GraphMandi, type GraphName } from "@/components/dup-graph";
 import { FilterSelect, SearchBox, SubmitButton, Tabs } from "@/components/client";
 import { Badge, Empty, Flash, PageHeader } from "@/components/ui";
 import { canEdit, requireUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { first, fmtNumber, titleCase } from "@/lib/format";
-import { findDuplicateGroups, sumListings, type DupGroup } from "@/lib/mandi-duplicates";
+import { findDuplicateGroups, MANDI_DELETE_ENABLED, removableCopies, sumListings, type DupGroup } from "@/lib/mandi-duplicates";
 import { stateNames } from "@/lib/stats";
 
 export const maxDuration = 60;
@@ -15,6 +15,7 @@ export default async function MandiDuplicatesPage({ searchParams }: { searchPara
   const sp = await searchParams;
   const user = await requireUser();
   const editor = canEdit(user);
+  const canRemove = MANDI_DELETE_ENABLED && user.role === "admin";
   const tab = first(sp.tab) || "merge";
   const state = first(sp.state);
   const q = first(sp.q).trim().toLowerCase();
@@ -28,6 +29,7 @@ export default async function MandiDuplicatesPage({ searchParams }: { searchPara
     (g) => !q || g.members.some((m) => m.name.toLowerCase().includes(q) || m.links.some((l) => l.raw_name.toLowerCase().includes(q))),
   );
   const page = shown.slice(0, PAGE_SIZE);
+  const removable = removableCopies(all).length;
 
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(sp)) if (typeof v === "string" && v && k !== "msg" && k !== "err") qs.set(k, v);
@@ -74,12 +76,27 @@ export default async function MandiDuplicatesPage({ searchParams }: { searchPara
         </div>
       )}
 
+      {tab === "unused" && editor && !MANDI_DELETE_ENABLED && (
+        <p className="mb-4 rounded-lg bg-zinc-100 px-3 py-2 text-xs text-zinc-600">Removing duplicate records from the mandi list is turned off. An admin can turn it on with <code>ALLOW_MANDI_DELETE=true</code>.</p>
+      )}
+      {canRemove && removable > 0 && (
+        <div className="card mb-4 border-red-200 p-4 text-sm">
+          <div className="font-medium text-zinc-900">{fmtNumber(removable)} duplicate mandi record{removable === 1 ? "" : "s"} in the mandi list (available_mandi) {removable === 1 ? "has" : "have"} no mandi names linked</div>
+          <p className="mt-1 text-xs text-zinc-600">Same district (or none) as the main copy, so they look like true duplicates. Removing deletes the record from the shared list (v1 loses it too). A copy of each is kept so it can be restored.</p>
+          <form action={autoRemoveUnusedMandisAction} className="mt-3">
+            <input type="hidden" name="back" value={back} />
+            <input type="hidden" name="state" value={state} />
+            <SubmitButton className="btn-danger" confirm={`Remove ${removable} duplicate mandi records from available_mandi? Copies are kept.`}>Remove all {fmtNumber(removable)}</SubmitButton>
+          </form>
+        </div>
+      )}
+
       {page.length === 0 ? (
         <Empty title="No duplicates here">Nothing matches this tab and filter.</Empty>
       ) : (
         <div className="space-y-4">
           {page.map((g) => (
-            <GroupCard key={`${g.stateCode}|${g.key}`} g={g} back={back} editor={editor} stateLabel={titleCase(names[g.stateCode] ?? g.stateCode.replace(/^\?/, ""))} />
+            <GroupCard key={`${g.stateCode}|${g.key}`} g={g} back={back} editor={editor} canRemove={canRemove} stateLabel={titleCase(names[g.stateCode] ?? g.stateCode.replace(/^\?/, ""))} />
           ))}
           {shown.length > page.length && <p className="text-xs text-zinc-500">Showing {page.length} of {fmtNumber(shown.length)}. Narrow with the state filter or search.</p>}
         </div>
@@ -88,7 +105,7 @@ export default async function MandiDuplicatesPage({ searchParams }: { searchPara
   );
 }
 
-function GroupCard({ g, back, editor, stateLabel }: { g: DupGroup; back: string; editor: boolean; stateLabel: string }) {
+function GroupCard({ g, back, editor, canRemove, stateLabel }: { g: DupGroup; back: string; editor: boolean; canRemove: boolean; stateLabel: string }) {
   const main = g.members[0];
   const mandis: GraphMandi[] = g.members.map((m, i) => ({
     id: String(m._id), name: titleCase(m.name), district: m.district ? titleCase(m.district) : null, postcode: m.postcode,
@@ -112,7 +129,7 @@ function GroupCard({ g, back, editor, stateLabel }: { g: DupGroup; back: string;
           <span />
           <span>Mandis (the copies)</span>
         </div>
-        <DupGraph mandis={mandis} names={names} editor={editor} back={back} />
+        <DupGraph mandis={mandis} names={names} editor={editor} canRemove={canRemove} back={back} />
       </div>
     </div>
   );

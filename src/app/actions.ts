@@ -13,7 +13,7 @@ import {
   type Status,
 } from "@/lib/catalog";
 import { createMandi, updateMandi } from "@/lib/mandis";
-import { autoMergeSafeDuplicates, mergeOneInto } from "@/lib/mandi-duplicates";
+import { autoMergeSafeDuplicates, autoRemoveUnusedCopies, mergeOneInto, removeDuplicateMandi } from "@/lib/mandi-duplicates";
 import { approveConfidentMandiGuesses } from "@/lib/mandi-match";
 import { deletePrices, editPrice, isProblem } from "@/lib/prices";
 import { SESSION_COOKIE, SESSION_MAX_AGE, signSession } from "@/lib/session";
@@ -207,9 +207,31 @@ export async function bulkApproveMandiGuessesAction(form: FormData) {
 /** Move the names of one mandi copy onto another copy (one pair at a time). */
 export async function mergeTwoMandisAction(form: FormData) {
   return act(form, async () => {
+    if (str(form, "remove") === "on") {
+      const user = await requireAdmin();
+      const r = await removeDuplicateMandi(await getDb(), user, needId(form, "fromId", "mandi"), needId(form, "intoId", "mandi"));
+      return `Moved ${r.names} mandi name(s) and ${r.listings} listings to ${r.intoName}, and removed ${r.name} from the mandi list (a copy is kept).`;
+    }
     const user = await requireEditor();
     const r = await mergeOneInto(await getDb(), user, needId(form, "fromId", "mandi"), needId(form, "intoId", "mandi"));
     return `Moved ${r.names} mandi name(s) and ${r.listings} listings from ${r.fromName} to ${r.intoName}.`;
+  });
+}
+
+/** Admin only: delete a duplicate record from available_mandi after moving what uses it to the main copy. */
+export async function removeDuplicateMandiAction(form: FormData) {
+  return act(form, async () => {
+    const user = await requireAdmin();
+    const r = await removeDuplicateMandi(await getDb(), user, needId(form, "fromId", "mandi"), needId(form, "intoId", "mandi"));
+    return `Removed ${r.name} from the mandi list${r.names ? `; its ${r.names} name(s) now use ${r.intoName}` : ""}. A copy is kept so it can be restored.`;
+  });
+}
+
+export async function autoRemoveUnusedMandisAction(form: FormData) {
+  return act(form, async () => {
+    const user = await requireAdmin();
+    const r = await autoRemoveUnusedCopies(await getDb(), user, str(form, "state") || undefined);
+    return `Removed ${r.removed} unused duplicate mandi(s) from the mandi list. Copies are kept.`;
   });
 }
 
