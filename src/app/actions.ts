@@ -13,6 +13,7 @@ import {
   type Status,
 } from "@/lib/catalog";
 import { createMandi, updateMandi } from "@/lib/mandis";
+import { autoMergeSafeDuplicates, mergeDuplicatesInto } from "@/lib/mandi-duplicates";
 import { approveConfidentMandiGuesses } from "@/lib/mandi-match";
 import { deletePrices, editPrice, isProblem } from "@/lib/prices";
 import { SESSION_COOKIE, SESSION_MAX_AGE, signSession } from "@/lib/session";
@@ -200,6 +201,23 @@ export async function bulkApproveMandiGuessesAction(form: FormData) {
     const user = await requireEditor();
     const r = await approveConfidentMandiGuesses(await getDb(), user, str(form, "state") || undefined);
     return `Approved ${r.approved} mandi names (${r.listings} listings updated). They are in Double-check.`;
+  });
+}
+
+/** Move every name linked to a same-named copy over to the chosen mandi. */
+export async function mergeDuplicateMandisAction(form: FormData) {
+  return act(form, async () => {
+    const user = await requireEditor();
+    const r = await mergeDuplicatesInto(await getDb(), user, needId(form, "intoId", "mandi"));
+    return `Moved ${r.names} mandi name(s) and ${r.listings} listings from ${r.copies} same-named mandi(s).`;
+  });
+}
+
+export async function autoMergeDuplicateMandisAction(form: FormData) {
+  return act(form, async () => {
+    const user = await requireEditor();
+    const r = await autoMergeSafeDuplicates(await getDb(), user, str(form, "state") || undefined);
+    return `Merged ${r.groups} duplicate mandi(s): ${r.names} names and ${r.listings} listings moved. They are in Double-check.`;
   });
 }
 

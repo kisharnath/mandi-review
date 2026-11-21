@@ -14,6 +14,8 @@ import {
 } from "../src/lib/catalog";
 import { COLL } from "../src/lib/db";
 import { createMandi } from "../src/lib/mandis";
+import { autoMergeSafeDuplicates, findDuplicateGroups, mergeDuplicatesInto } from "../src/lib/mandi-duplicates";
+import { confidentMandiGuesses } from "../src/lib/mandi-match";
 import { badPriceCounts, deletePrices, editPrice, listBadPrices } from "../src/lib/prices";
 
 const uri = process.env.TEST_MONGODB_URI;
@@ -218,4 +220,58 @@ test("wrong prices: listed by problem, deleted with a copy kept, edited with che
   assert.equal(await p.countDocuments({ _id: modalOut }), 0);
   assert.deepEqual(await badPriceCounts(db), { zero: 0, min_above_max: 0, modal_outside: 0, no_price: 0, modal_missing: 1 });
   assert.equal(await db.collection(COLL.audit).countDocuments({ action: /^price\./ }), 5);
+});
+
+test("duplicate mandis: found, merged onto the most complete copy, and no longer split prices", async () => {
+  const gj = "gujarat";
+  await db.collection(COLL.states).insertOne({ _id: gj as unknown as ObjectId, name: "gujarat", spellings: ["gujarat", "guj"] });
+  const [full, bare, other, lone] = [new ObjectId(), new ObjectId(), new ObjectId(), new ObjectId()];
+  await db.collection(COLL.mandis).insertMany([
+    { _id: full, name: "Unjha APMC", state: "gujarat", district: "Mehsana", postcode: "384170", location: { type: "Point", coordinates: [72.4, 23.8] } },
+    { _id: bare, name: "unjha", state: "guj" },
+    { _id: other, name: "Unjha (Mandi)", state: "gujarat", district: "Surat" },
+    { _id: lone, name: "Palanpur", state: "gujarat", district: "Banaskantha" },
+  ]);
+  const [nA, nB, pend] = [new ObjectId(), new ObjectId(), new ObjectId()];
+  await db.collection(COLL.mandiNames).insertMany([
+    { _id: nA, source: "agmarknet", state_code: gj, raw_name: "unjha", mandi_id: full, status: "approved", listings: 5, suggestion: { mandi_id: bare } },
+    { _id: nB, source: "enam", state_code: gj, raw_name: "unjha apmc", mandi_id: bare, status: "approved", listings: 3 },
+    { _id: pend, source: "ap", state_code: gj, raw_name: "Unjha Mandi", mandi_id: null, status: "pending", listings: 1 },
+  ]);
+  await db.collection(COLL.listings).insertMany([
+    { _id: new ObjectId(), source_system: "enam", state_code: gj, market_name: "unjha apmc", mandi_id: bare },
+    { _id: new ObjectId(), source_system: "enam", state_code: gj, market_name: "unjha apmc", mandi_id: bare },
+  ]);
+
+  const groups = await findDuplicateGroups(db, { state: gj });
+  assert.equal(groups.length, 1); // Palanpur has no copy; spellings "guj"/"gujarat" are one state
+  const g = groups[0];
+  assert.equal(g.members.length, 3);
+  assert.equal(g.safe, false); // Mehsana vs Surat could be two places
+  assert.equal(g.waiting.length, 1);
+  // A district conflict is never merged automatically and blocks the exact-match approval.
+  assert.deepEqual(await autoMergeSafeDuplicates(db, user, gj), { groups: 0, names: 0, listings: 0 });
+  assert.equal((await confidentMandiGuesses(db, { state: gj })).total, 0);
+
+  await db.collection(COLL.mandis).updateOne({ _id: other }, { $set: { district: "Mehsana" } });
+  const safe = (await findDuplicateGroups(db, { state: gj }))[0];
+  assert.equal(safe.safe, true);
+  assert.equal(String(safe.members[0]._id), String(full));
+  assert.equal(safe.linkedCopies, 2);
+  const guesses = await confidentMandiGuesses(db, { state: gj });
+  assert.equal(guesses.total, 1); // the pending name now resolves to the kept copy
+  assert.equal(String(guesses.items[0].mandiId), String(full));
+
+  const res = await autoMergeSafeDuplicates(db, user, gj);
+  assert.deepEqual(res, { groups: 1, names: 1, listings: 2 });
+  const moved = await db.collection(COLL.mandiNames).findOne({ _id: nB });
+  assert.equal(String(moved!.mandi_id), String(full));
+  assert.equal(moved!.needs_check, true);
+  assert.equal(String((await db.collection(COLL.mandiNames).findOne({ _id: nA }))!.suggestion!.mandi_id), String(full));
+  assert.equal(await db.collection(COLL.listings).countDocuments({ mandi_id: bare }), 0);
+  assert.equal(await db.collection(COLL.listings).countDocuments({ mandi_id: full }), 2);
+  assert.equal(await db.collection(COLL.mandis).countDocuments({ state: { $in: ["gujarat", "guj"] } }), 4); // available_mandi untouched
+  assert.equal((await findDuplicateGroups(db, { state: gj }))[0].linkedCopies, 1);
+  assert.equal(await db.collection(COLL.audit).countDocuments({ action: "mandi_duplicate.auto_merge" }), 1);
+  await assert.rejects(mergeDuplicatesInto(db, user, lone), /No other mandi has the same name/);
 });

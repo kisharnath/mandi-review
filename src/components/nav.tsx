@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Activity, BadgeAlert, BarChart3, BookOpen, Database, Flag, History, LayoutDashboard, ListChecks, LogOut, MapPin, MessageSquareText, Shuffle, Signpost, Sprout } from "lucide-react";
+import { Activity, BadgeAlert, BarChart3, BookOpen, Copy, Database, Flag, History, LayoutDashboard, ListChecks, LogOut, MapPin, MessageSquareText, Shuffle, Signpost, Sprout } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -13,6 +13,7 @@ const linksFor = (mandis: string, audit: string) => [
   { href: "/prices", label: "Wrong prices", icon: BadgeAlert },
   { href: "/mapping", label: "Crop names", icon: Shuffle },
   { href: "/mandi-links", label: "Mandi names", icon: Signpost },
+  { href: "/mandi-duplicates", label: "Duplicate mandis", icon: Copy },
   { href: "/crop-words", label: "Farmer words", icon: MessageSquareText },
   { href: "/crops", label: "Crops & products", icon: Sprout },
   { href: `/data/${mandis}`, label: "Mandis", icon: MapPin },

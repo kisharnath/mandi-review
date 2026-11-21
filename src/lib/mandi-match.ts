@@ -2,6 +2,8 @@ import type { Db, ObjectId } from "mongodb";
 import { COLL, MAX_TIME_MS } from "./db";
 import { mandiKey } from "./heuristics";
 import { decideMandiName, stateSpellings, type MandiNameDoc } from "./catalog";
+import { districtsCompatible, rankMandis } from "./mandi-dup-rules";
+import { linkedListings } from "./mandi-duplicates";
 import { writeAudit } from "./audit";
 import type { SessionUser } from "./session";
 
@@ -10,6 +12,8 @@ export type Confident = { row: MandiNameDoc; mandiId: ObjectId; mandiName: strin
 /**
  * Pending mandi names that match exactly one mandi in the same state after cleaning,
  * and where the old system's guess (if any) agrees. Anything ambiguous is left for a person.
+ * Several same-named copies of one mandi count as one when none names a different district;
+ * the most complete copy (see the Duplicate mandis page) is the one picked.
  */
 export async function confidentMandiGuesses(db: Db, opts: { state?: string; limit?: number } = {}): Promise<{ items: Confident[]; total: number }> {
   const rows = await db
@@ -25,7 +29,7 @@ export async function confidentMandiGuesses(db: Db, opts: { state?: string; limi
     if (!spellings.length) continue;
     const mandis = await db
       .collection(COLL.mandis)
-      .find({ state: { $in: spellings } }, { projection: { name: 1, district: 1 } })
+      .find({ state: { $in: spellings } }, { projection: { name: 1, district: 1, postcode: 1, location: 1 } })
       .maxTimeMS(MAX_TIME_MS)
       .toArray();
     const byKey = new Map<string, typeof mandis>();
@@ -33,13 +37,18 @@ export async function confidentMandiGuesses(db: Db, opts: { state?: string; limi
       const k = mandiKey(String(m.name));
       if (k.length >= 3) byKey.set(k, [...(byKey.get(k) ?? []), m]);
     }
+    const copies = [...byKey.values()].filter((v) => v.length > 1 && districtsCompatible(v)).flat();
+    const listings = await linkedListings(db, copies.map((m) => m._id));
     for (const row of rows.filter((r) => r.state_code === code)) {
       const k = mandiKey(row.raw_name);
-      const hits = byKey.get(k);
-      if (k.length < 3 || !hits || hits.length !== 1) continue;
+      const found = byKey.get(k);
+      if (k.length < 3 || !found) continue;
+      if (found.length > 1 && !districtsCompatible(found)) continue;
+      const hits = found.length > 1 ? rankMandis(found.map((m) => Object.assign(m, { listings: listings.get(String(m._id)) ?? 0 }))) : found;
+      const best = hits[0];
       const sug = row.suggestion?.mandi_id;
-      if (sug && String(sug) !== String(hits[0]._id)) continue;
-      items.push({ row, mandiId: hits[0]._id, mandiName: String(hits[0].name), district: hits[0].district ? String(hits[0].district) : null });
+      if (sug && !hits.some((h) => String(h._id) === String(sug))) continue;
+      items.push({ row, mandiId: best._id, mandiName: String(best.name), district: best.district ? String(best.district) : null });
     }
   }
   items.sort((a, b) => (b.row.listings ?? 0) - (a.row.listings ?? 0));
