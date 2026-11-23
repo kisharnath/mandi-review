@@ -40,7 +40,8 @@ async function act(form: FormData, work: () => Promise<string>): Promise<never> 
   let err: string | undefined;
   try {
     msg = await work();
-    revalidatePath("/", "layout");
+    // Pages are dynamic, so only the page we return to and the menu badges need refreshing.
+    revalidatePath(new URL(back, "http://x").pathname);
     revalidateTag("badges");
   } catch (e) {
     err = e instanceof Error ? e.message : String(e);

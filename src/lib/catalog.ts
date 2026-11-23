@@ -103,7 +103,8 @@ export async function decideCropName(
   );
   const filter = await listingFilterForCropName(db, row);
   const res = await db.collection(COLL.listings).updateMany(filter, { $set: { product_id: productId } });
-  await coll.updateOne({ _id: id }, { $set: { listings: await db.collection(COLL.listings).countDocuments(filter) } });
+  // matchedCount is the number of listings that match the link, so no second scan is needed.
+  await coll.updateOne({ _id: id }, { $set: { listings: res.matchedCount } });
 
   await writeAudit(db, user, {
     action: `crop_name.${decision.status}`,
